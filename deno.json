@@ -1,0 +1,9 @@
+{
+"tasks": {
+"rollup": "deno run --allow-sys --allow-read --allow-write --allow-ffi --allow-env 'npm:rollup' -c"
+},
+  "imports": {
+    "escape-js/escape.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/escape-js@0.0.2/src/escape.esm.js",
+    "rollup": "npm:rollup@^4.40.2"
+  }
+}
