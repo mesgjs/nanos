@@ -1,9 +1,8 @@
 {
-"tasks": {
-"rollup": "deno run --allow-sys --allow-read --allow-write --allow-ffi --allow-env 'npm:rollup' -c"
-},
+    "tasks": {
+	"minify": "deno run --allow-read --allow-write --allow-env --allow-run npm:esbuild src/nanos.esm.js --outfile=dist/nanos.min.esm.js --minify --format=esm --sourcemap=external"
+    },
   "imports": {
-    "escape-js/escape.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/escape-js@0.0.2/src/escape.esm.js",
-    "rollup": "npm:rollup@^4.40.2"
+    "escape-js/escape.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/escape-js@0.0.2/src/escape.esm.js"
   }
 }

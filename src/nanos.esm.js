@@ -4,7 +4,7 @@
  * Author: Brian Katzung <briank@kappacs.com>
  */
 
-import { escapeJSString, unescapeJSString } from 'escape-js/escape.esm.js';
+import { escapeJSString, unescapeJSString } from './vendor/escape-js.esm.js';
 
 export const isIndex = key => /^(?:0|[1-9]\d*)$/.test(key);
 export const isNegIndex = key => /^-[1-9]\d*$/.test(key);
