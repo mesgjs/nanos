@@ -542,12 +542,12 @@ export { NANOS as default };
 // SysCL List Data lexical token regexps
 const slidPats = {
     mlc: '/\\*.*?\\*/',		// Multi-line comment
-    num: '[+-]?(?:0[bBoOxX])?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+|n)?(?![0-9a-zA-Z])',
+    num: '[+-]?(?:0[bB][01]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+|[0-9]+)(?:n?|(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)?(?![0-9a-zA-Z])',
     sqs: "'(?:\\\\'|[^'])*'",	// Single-quoted string
     dqs: '"(?:\\\\"|[^"])*"',	// Double-quoted string
     stok: '[[=\\]]',		// Special tokens
     spc: '\\s+',		// Space
-    oth: '[^\'"/[=\\]\\s]+',	// Other
+    oth: '(?:[^\'"/[=\\]\\s]|\\/(?![*]))+',	// Other
 };
 const slidRE = new RegExp('(' + 'mlc num sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
 const slidNum = new RegExp('^' + slidPats.num + '$');
@@ -555,7 +555,7 @@ const slidNum = new RegExp('^' + slidPats.num + '$');
 // Parse SLID-format data, returning (potentially nested) NANOS
 export function parseSLID (str, qj = false) {
     let match = str.match(/\[\((.*?)\)\]/s);
-    if (!match) throw new SyntaxError('SLID boundary marker(s) not found');
+    if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
     const tokens = match[1].replace(/\)\\\]/g, ')]').split(slidRE).filter(t => !/^(\s*|\/\*.*\*\/)$/.test(t));
     match = undefined;
     const parseLeft = () => {	// Can be left of = (numbers, strings)
@@ -567,6 +567,7 @@ export function parseSLID (str, qj = false) {
 	    if (/^[+-]?0x/i.test(token)) return parseInt(token.replace(/0x/i, ''), 16);
 	    return parseFloat(token);
 	}
+	if (token === "'" || token === '"') throw new SyntaxError(`Unmatched ${token} in SLID`);
 	if (token[0] !== "'" && token[0] !== '"') return token;
 	return unescapeJSString(token.slice(1, -1));
     }
