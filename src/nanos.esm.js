@@ -258,12 +258,14 @@ export class NANOS {
 	const batch = this._rio?.batch || (cb => cb());
 	batch(() => items.forEach(value => {
 	    const base = this._next;
-	    if (value instanceof NANOS) {
+	    if (value instanceof NANOS || value instanceof Map) {
 		for (const e of value.entries()) {
 		    if (isIndex(e[0])) this.set(base + parseInt(e[0], 10), e[1]);
 		    else this.set(e[0], e[1]);
 		}
-	    } else if (typeof value === 'object') {
+	    } else if (value instanceof Set) {
+                this.push(...value);
+            } else if (typeof value === 'object') {
 		for (const k of Object.keys(value)) {
 		    if (isIndex(k)) this.set(base + parseInt(k, 10), value[k]);
 		    else this.set(k, value[k]);
@@ -506,7 +508,13 @@ export class NANOS {
 	    if (value instanceof NANOS) {
 		this.#renumber(0, this._next, value.next);
 		this.fromEntries(value.entries(), true);
-	    } else if (typeof value === 'object') {
+	    } else if (value instanceof Map) {
+                const next = Array.from(value.keys()).filter(k => isIndex(k)).reduce((acc, cur) => Math.max(acc, cur), -1) + 1;
+                this.#renumber(0, this._next, next);
+                this.fromEntries(value.entries(), true);
+            } else if (value instanceof Set) {
+                this.unshift(...value)
+            } else if (typeof value === 'object') {
 		const next = Array.isArray(value) ? value.length : Object.keys(value).filter(k => isIndex(k)).reduce((acc, cur) => Math.max(acc, cur), -1) + 1;
 		this.#renumber(0, this._next, next);
 		this.fromEntries(Object.entries(value), true);
@@ -542,15 +550,17 @@ export { NANOS as default };
 // SysCL List Data lexical token regexps
 const slidPats = {
     mlc: '/\\*.*?\\*/',		// Multi-line comment
-    num: '[+-]?(?:0[bB][01]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+|[0-9]+)(?:n?|(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)?(?![0-9a-zA-Z])',
+    // Numbers
+    flt: '[+-]?\\d+(?:[.]\\d+)?(?:[eE][+-]?\\d+)?(?![0-9a-zA-Z])',
+    int: '[+-]?(?:0[bB][01]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+|\\d+)n?(?![0-9a-zA-Z])',
     sqs: "'(?:\\\\'|[^'])*'",	// Single-quoted string
     dqs: '"(?:\\\\"|[^"])*"',	// Double-quoted string
     stok: '[[=\\]]',		// Special tokens
     spc: '\\s+',		// Space
     oth: '(?:[^\'"/[=\\]\\s]|\\/(?![*]))+',	// Other
 };
-const slidRE = new RegExp('(' + 'mlc num sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
-const slidNum = new RegExp('^' + slidPats.num + '$');
+const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
+const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
 
 // Parse SLID-format data, returning (potentially nested) NANOS
 export function parseSLID (str, qj = false) {
