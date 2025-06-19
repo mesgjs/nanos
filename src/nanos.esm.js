@@ -616,6 +616,7 @@ export function parseSLID (str, qj = false) {
     if (tokens.length) throw new SyntaxError('Malformed SLID');
     return result;
 }
+NANOS.parseSLID = parseSLID;
 
 // Parse relaxed, "quasi-JSON" (by way of SLID)
 const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
@@ -625,5 +626,6 @@ export function parseQJSON (str) {
       .map(s => (s[0] === '"') ? s : s.replace(/[{},:]/g, c => qjMap[c]))
       .join('') + ')]', true);
 }
+NANOS.parseQJSON = parseQJSON;
 
 // END
