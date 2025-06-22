@@ -6,6 +6,29 @@
 
 import { escapeJSString, unescapeJSString } from './vendor/escape-js.esm.js';
 
+//////////////////////////////////////////////////////////////////////
+// SLID and QJSON parsing details
+//////////////////////////////////////////////////////////////////////
+
+// SysCL List Data lexical token regexps
+const slidPats = {
+    mlc: '/\\*.*?\\*/',		// Multi-line comment
+    // Numbers
+    flt: '[+-]?\\d+(?:[.]\\d+)?(?:[eE][+-]?\\d+)?(?![0-9a-zA-Z])',
+    int: '[+-]?(?:0[bB][01]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+|\\d+)n?(?![0-9a-zA-Z])',
+    sqs: "'(?:\\\\'|[^'])*'",	// Single-quoted string
+    dqs: '"(?:\\\\"|[^"])*"',	// Double-quoted string
+    stok: '[[=\\]]',		// Special tokens
+    spc: '\\s+',		// Space
+    oth: '(?:[^\'"/[=\\]\\s]|\\/(?![*]))+',	// Other
+};
+const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
+const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
+
+const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
+
+//////////////////////////////////////////////////////////////////////
+
 /**
  * Checks if a key is a valid array index.
  * @param {string} key
@@ -368,6 +391,78 @@ export class NANOS {
      */
     pairs (compact = false) {
 	return [...this.entries(compact)].flat(1);
+    }
+
+    /**
+     * Parse relaxed, "quasi-JSON" (by way of SLID).
+     * @param {string} str
+     * @returns {NANOS}
+     */
+    static parseQJSON (str) {
+        return parseSLID('[(' + str.replaceAll(/^\s*[\[\{]?|[\]\}]\s*$/g, '')
+        .split(/("(?:\\\\"|[^"])*")/)
+        .map(s => (s[0] === '"') ? s : s.replace(/[{},:]/g, c => qjMap[c]))
+        .join('') + ')]', true);
+    }
+
+    /**
+     * Parse SLID-format data, returning (potentially nested) NANOS.
+     * @param {string} str
+     * @param {boolean} [qj=false]
+     * @returns {NANOS}
+     */
+    static parseSLID (str, qj = false) {
+        let match = str.match(/\[\((.*?)\)\]/s);
+        if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
+        const tokens = match[1].replace(/\)\\\]/g, ')]').split(slidRE).filter(t => !/^(\s*|\/\*.*\*\/)$/.test(t));
+        match = undefined;
+        const parseLeft = () => {	// Can be left of = (numbers, strings)
+            const token = tokens.shift();
+            if (slidNum.test(token)) {
+                if (/n$/i.test(token)) return BigInt(token.slice(0, -1));
+                if (/^[+-]?0b/i.test(token)) return parseInt(token.replace(/0b/i, ''), 2);
+                if (/^[+-]?0o/i.test(token)) return parseInt(token.replace(/0o/i, ''), 8);
+                if (/^[+-]?0x/i.test(token)) return parseInt(token.replace(/0x/i, ''), 16);
+                return parseFloat(token);
+            }
+            if (token === "'" || token === '"') throw new SyntaxError(`Unmatched ${token} in SLID`);
+            if (token[0] !== "'" && token[0] !== '"') return token;
+            return unescapeJSString(token.slice(1, -1));
+        }
+        const parseRight = () => {	// More that can be right of =
+            if (tokens[0] !== '[') {
+                if (!qj) switch (tokens[0]) {// Special values
+                case '@f': tokens.shift(); return false;
+                case '@n': tokens.shift(); return null;
+                case '@t': tokens.shift(); return true;
+                case '@u': tokens.shift(); return undefined;
+                }
+                return parseLeft();	// Everything OK on the left
+            }
+            tokens.shift();
+            return parseItems();	// Nested lists
+        }
+        function parseItems () {
+            const result = new NANOS();
+            while (tokens.length && tokens[0] !== ']') {
+                let key;			// Default: positional
+                if (tokens[1] === '=') {	// Named value
+                    key = parseLeft();
+                    tokens.shift();
+                } else if (!qj && tokens[0] === '@e') {	// Empty
+                    tokens.shift();
+                    ++result.next;
+                    continue;
+                }
+                result.set(key, parseRight());
+            }
+            if (tokens[0] === ']') tokens.shift();
+            return result;
+        }
+        const result = parseItems();
+        // SLID was malformed if any tokens are left
+        if (tokens.length) throw new SyntaxError('Malformed SLID');
+        return result;
     }
 
     /**
@@ -755,100 +850,8 @@ export class NANOS {
 // Alias .get() to .at()
 NANOS.prototype.get = NANOS.prototype.at;
 
+// Make parseQJSON and parseSLID directly importable
+export const { parseQJSON, parseSLID } = NANOS;
 export { NANOS as default };
-
-//////////////////////////////////////////////////////////////////////
-// SLID Parsing Section
-//////////////////////////////////////////////////////////////////////
-
-// SysCL List Data lexical token regexps
-const slidPats = {
-    mlc: '/\\*.*?\\*/',		// Multi-line comment
-    // Numbers
-    flt: '[+-]?\\d+(?:[.]\\d+)?(?:[eE][+-]?\\d+)?(?![0-9a-zA-Z])',
-    int: '[+-]?(?:0[bB][01]+|0[oO][0-7]+|0[xX][0-9a-fA-F]+|\\d+)n?(?![0-9a-zA-Z])',
-    sqs: "'(?:\\\\'|[^'])*'",	// Single-quoted string
-    dqs: '"(?:\\\\"|[^"])*"',	// Double-quoted string
-    stok: '[[=\\]]',		// Special tokens
-    spc: '\\s+',		// Space
-    oth: '(?:[^\'"/[=\\]\\s]|\\/(?![*]))+',	// Other
-};
-const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
-const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
-
-/**
- * Parse SLID-format data, returning (potentially nested) NANOS.
- * @param {string} str
- * @param {boolean} [qj=false]
- * @returns {NANOS}
- */
-export function parseSLID (str, qj = false) {
-    let match = str.match(/\[\((.*?)\)\]/s);
-    if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
-    const tokens = match[1].replace(/\)\\\]/g, ')]').split(slidRE).filter(t => !/^(\s*|\/\*.*\*\/)$/.test(t));
-    match = undefined;
-    const parseLeft = () => {	// Can be left of = (numbers, strings)
-	const token = tokens.shift();
-	if (slidNum.test(token)) {
-	    if (/n$/i.test(token)) return BigInt(token.slice(0, -1));
-	    if (/^[+-]?0b/i.test(token)) return parseInt(token.replace(/0b/i, ''), 2);
-	    if (/^[+-]?0o/i.test(token)) return parseInt(token.replace(/0o/i, ''), 8);
-	    if (/^[+-]?0x/i.test(token)) return parseInt(token.replace(/0x/i, ''), 16);
-	    return parseFloat(token);
-	}
-	if (token === "'" || token === '"') throw new SyntaxError(`Unmatched ${token} in SLID`);
-	if (token[0] !== "'" && token[0] !== '"') return token;
-	return unescapeJSString(token.slice(1, -1));
-    }
-    const parseRight = () => {	// More that can be right of =
-	if (tokens[0] !== '[') {
-	    if (!qj) switch (tokens[0]) {// Special values
-	    case '@f': tokens.shift(); return false;
-	    case '@n': tokens.shift(); return null;
-	    case '@t': tokens.shift(); return true;
-	    case '@u': tokens.shift(); return undefined;
-	    }
-	    return parseLeft();	// Everything OK on the left
-	}
-	tokens.shift();
-	return parseItems();	// Nested lists
-    }
-    function parseItems () {
-	const result = new NANOS();
-	while (tokens.length && tokens[0] !== ']') {
-	    let key;			// Default: positional
-	    if (tokens[1] === '=') {	// Named value
-		key = parseLeft();
-		tokens.shift();
-	    } else if (!qj && tokens[0] === '@e') {	// Empty
-		tokens.shift();
-		++result.next;
-		continue;
-	    }
-	    result.set(key, parseRight());
-	}
-	if (tokens[0] === ']') tokens.shift();
-	return result;
-    }
-    const result = parseItems();
-    // SLID was malformed if any tokens are left
-    if (tokens.length) throw new SyntaxError('Malformed SLID');
-    return result;
-}
-NANOS.parseSLID = parseSLID;
-
-/**
- * Parse relaxed, "quasi-JSON" (by way of SLID).
- * @param {string} str
- * @returns {NANOS}
- */
-const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
-export function parseQJSON (str) {
-    return parseSLID('[(' + str.replaceAll(/^\s*[\[\{]?|[\]\}]\s*$/g, '')
-      .split(/("(?:\\\\"|[^"])*")/)
-      .map(s => (s[0] === '"') ? s : s.replace(/[{},:]/g, c => qjMap[c]))
-      .join('') + ')]', true);
-}
-NANOS.parseQJSON = parseQJSON;
 
 // END
