@@ -6,26 +6,60 @@
 
 import { escapeJSString, unescapeJSString } from './vendor/escape-js.esm.js';
 
+/**
+ * Checks if a key is a valid array index.
+ * @param {string} key
+ * @returns {boolean}
+ */
 export const isIndex = key => /^(?:0|[1-9]\d*)$/.test(key);
+/**
+ * Checks if a key is a negative index.
+ * @param {string} key
+ * @returns {boolean}
+ */
 export const isNegIndex = key => /^-[1-9]\d*$/.test(key);
-
+/**
+ * Named and Numbered Ordered Storage.
+ * @class
+ */
 export class NANOS {
+    /**
+     * Creates a new NANOS instance.
+     * @param {...*} items
+     */
     constructor (...items) {
 	this.clear();
 	this.push(...items);
     }
 
-    // Get value at key or index (negative index relative to end)
+    /**
+     * Get value at key or index (negative index relative to end).
+     * @param {string|number} key
+     * @param {*} [defVal]
+     * @returns {*}
+     */
     at (key, defVal) {
 	this._rio?.depend();
 	key = this.#wrapKey(key);
 	return Object.hasOwn(this._storage, key) ? this._storage[key] : defVal;
     }
 
+    /**
+     * Gets the auto-promote flag.
+     * @returns {boolean}
+     */
     get autoPromote () { return this._autoPromote; }
 
+    /**
+     * Sets the auto-promote flag.
+     * @param {boolean} v
+     */
     set autoPromote (v) { this._autoPromote = v; }
 
+    /**
+     * Clears the NANOS instance.
+     * @returns {this}
+     */
     clear () {
 	if (this._locked) throw new TypeError('NANOS: Cannot clear after locking');
 	this._next = 0;
@@ -37,7 +71,12 @@ export class NANOS {
 	return this;
     }
 
-    // NOTE: unlike the delete statement, this returns the deleted value!
+    /**
+     * Deletes a key-value pair.
+     * NOTE: unlike the delete statement, this returns the deleted value!
+     * @param {string|number} key
+     * @returns {*}
+     */
     delete (key) {
 	if (this._locked) throw new TypeError('NANOS: Cannot delete after locking');
 	const skey = '' + key;
@@ -50,12 +89,15 @@ export class NANOS {
 	return ret;
     }
 
+    /** Signals a dependency for reactive interfaces. */
     depend () { this._rio?.depend(); }
 
-    /*
-     * Returns [ [ key1, value1 ], ... [ keyN, valueN ] ]
+    /**
+     * Returns an iterator of [key, value] pairs.
      * Compact mode uses numeric index keys instead of the standard strings
      * (e.g. 0 instead of '0').
+     * @param {boolean} [compact=false]
+     * @yields {[string|number, *]}
      */
     *entries (compact = false) {
 	this._rio?.depend();
@@ -63,32 +105,53 @@ export class NANOS {
 	for (const k of this._keys) yield [ ik(k), this._storage[k] ];
     }
 
-    // Returns a shallow copy of elements for which f(value, key) is true
+    /**
+     * Returns a shallow copy of elements for which f(value, key) is true.
+     * @param {function(*, string|number, NANOS): boolean} f
+     * @returns {NANOS}
+     */
     filter (f) {
 	this._rio?.depend();
 	return new NANOS.fromEntries([...this.entries()].filter(kv => f(kv[1], kv[0], this)));
     }
 
-    // Returns first [key, value] where f(value, key) is true; cf find, findIndex
+    /**
+     * Returns first [key, value] where f(value, key) is true; cf find, findIndex.
+     * @param {function(*, string|number, NANOS): boolean} f
+     * @returns {[string|number, *]|undefined}
+     */
     find (f) {
 	this._rio?.depend();
 	const s = this._storage;
 	for (const k of this._keys) if (f(s[k], k, this)) return [k, s[k]];
     }
 
-    // Returns last [key, value] where f(value, key) is true; cf findLast, findLastIndex
+    /**
+     * Returns last [key, value] where f(value, key) is true; cf findLast, findLastIndex.
+     * @param {function(*, string|number, NANOS): boolean} f
+     * @returns {[string|number, *]|undefined}
+     */
     findLast (f) {
 	this._rio?.depend();
 	const s = this._storage;
 	for (const k of this._keys.toReversed()) if (f(s[k], k, this)) return [k, s[k]];
     }
 
+    /**
+     * Executes a function for each element.
+     * @param {function(*, string|number, NANOS): void} f
+     */
     forEach (f) {
 	this._rio?.depend();
 	for (const k of this._keys) f(this._storage[k], k, this);
     }
 
-    // [ [ key1, value1 ], ... [ keyN, valueN ] ]
+    /**
+     * Populates from an array of entries.
+     * @param {Array<[string|number, *]>} entries
+     * @param {boolean} [insert=false]
+     * @returns {this}
+     */
     fromEntries (entries, insert = false) {
 	if (this._locked) throw new TypeError('NANOS: Cannot fromEntries after locking');
 	if (insert && this._lockInd) throw new TypeError('NANOS: Cannot insert fromEntries after index lock');
@@ -101,9 +164,12 @@ export class NANOS {
 	return this;
     }
 
-    /*
-     * [ key1, value1, ... keyN, valueN ]
-     * { type: '@NANOS@', next, pairs }
+    /**
+     * Populates from a list of key-value pairs.
+     * Can be [ key1, value1, ... keyN, valueN ]
+     * or { type: '@NANOS@', next, pairs }
+     * @param {...*} pairs
+     * @returns {this}
      */
     fromPairs (...pairs) {
 	if (this._locked) throw new TypeError('NANOS: Cannot fromPairs after locking');
@@ -128,28 +194,49 @@ export class NANOS {
 	return this;
     }
 
-    // Instead of "key in NANOS"
+    /**
+     * Checks for the existence of a key.
+     * Instead of "key in NANOS".
+     * @param {string|number} key
+     * @returns {boolean}
+     */
     has (key) {
 	this._rio?.depend();
 	return Object.hasOwn(this._storage, this.#wrapKey(key));
     }
 
+    /**
+     * Checks if a value exists.
+     * @param {*} value
+     * @returns {boolean}
+     */
     includes (value) {
 	return this.keyOf(value) !== undefined;
     }
 
-    // Just the index entries
+    /**
+     * Iterates over indexed entries.
+     * @param {boolean} [compact=false]
+     * @yields {[string|number, *]}
+     */
     *indexEntries (compact = false) {
 	for (const e of this.entries(compact)) if (isIndex(e[0])) yield e;
     }
 
-    // Just the index keys
+    /**
+     * Iterates over index keys.
+     * @yields {string}
+     */
     *indexKeys () {
 	this._rio?.depend();
 	for (const k of this._keys) if (isIndex(k)) yield k;
     }
 
-    // Is a key/value (or, if undef, the key-set) locked?
+    /**
+     * Is a key/value (or, if undef, the key-set) locked?
+     * @param {string|number} [key]
+     * @returns {boolean}
+     */
     isLocked (key) {
 	this._rio?.depend();
 	if (key === undefined) return this._locked;	// Key-set locked
@@ -158,7 +245,11 @@ export class NANOS {
 	return !Object.getOwnPropertyDescriptor(this._storage, key)?.writable;
     }
 
-    // Is a key/value redacted?
+    /**
+     * Is a key/value redacted?
+     * @param {string|number} key
+     * @returns {boolean}
+     */
     isRedacted (key) {
 	this._rio?.depend();
 	if (this._redacted === true) return true;
@@ -167,21 +258,36 @@ export class NANOS {
 	return this._redacted?.[key];
     }
 
-    // Returns first key/index with matching value, or undefined; cf indexOf
+    /**
+     * Returns first key/index with matching value, or undefined; cf indexOf.
+     * @param {*} value
+     * @returns {string|number|undefined}
+     */
     keyOf (value) { return this.find(v => v === value)?.[0]; }
 
-    // keys iterator
+    /**
+     * Returns an iterator for the keys.
+     * @returns {Iterator<string>}
+     */
     keys () {
 	this._rio?.depend();
 	return this._keys.values();
     }
 
-    // Returns last key/index with matchien value, or undefined; cf lastIndexOf
+    /**
+     * Returns last key/index with matching value, or undefined; cf lastIndexOf.
+     * @param {*} value
+     * @returns {string|number|undefined}
+     */
     lastKeyOf (value) {
 	return this.findLast(v => v === value)?.[0];
     }
 
-    // Lock specific *values* by key (doesn't affect key addition/removal)
+    /**
+     * Lock specific *values* by key (doesn't affect key addition/removal).
+     * @param {...(string|number)} keys
+     * @returns {this}
+     */
     lock (...keys) {
 	if (typeof keys[0] === 'object') key = keys[0];
 	for (let key of keys) {
@@ -196,35 +302,55 @@ export class NANOS {
 	return this;
     }
 
-    // Lock all current (and possibly new) *values* (doesn't affect keys)
+    /**
+     * Lock all current (and possibly new) *values* (doesn't affect keys).
+     * @param {boolean} [andNew=false]
+     * @returns {this}
+     */
     lockAll (andNew = false) {
 	if (andNew) this._lockNew = true;
 	this.lock(this._keys.values());
 	return this;
     }
 
-    // Lock the *key* set (unlocked values can still change)
+    /**
+     * Lock the *key* set (unlocked values can still change).
+     * @returns {this}
+     */
     lockKeys () {
 	this._locked = true;
 	this._rio?.changed();
 	return this;
     }
 
-    // Just the named entries
+    /**
+     * Iterates over named entries.
+     * @yields {[string, *]}
+     */
     *namedEntries () {
 	for (const e of this.entries()) if (!isIndex(e[0])) yield e;
     }
 
-    // Just the named keys
+    /**
+     * Iterates over named keys.
+     * @yields {string}
+     */
     *namedKeys () {
 	for (const e of this.entries()) if (!isIndex(e[0])) yield e[0];
     }
 
-    // "Next" index (max index + 1); similar to array.length
+    /**
+     * "Next" index (max index + 1); similar to array.length.
+     * @returns {number}
+     */
     get next () {
 	this._rio?.depend();
 	return this._next;
     }
+    /**
+     * Sets the next index, truncating if necessary.
+     * @param {number} nn
+     */
     set next (nn) {
 	if (this._locked) throw new TypeError('NANOS: Cannot set next after locking');
 	if (!Number.isInteger(nn) || nn < 0) return;
@@ -235,11 +361,19 @@ export class NANOS {
 	}
     }
 
+    /**
+     * Returns a flat array of key-value pairs.
+     * @param {boolean} [compact=false]
+     * @returns {Array<*>}
+     */
     pairs (compact = false) {
 	return [...this.entries(compact)].flat(1);
     }
 
-    // Like Array.pop (only applies to indexed values)
+    /**
+     * Like Array.pop (only applies to indexed values).
+     * @returns {*}
+     */
     pop () {
 	if (this._locked) throw new TypeError('NANOS: Cannot pop after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot pop after index lock');
@@ -247,11 +381,14 @@ export class NANOS {
 	return this.delete(--this._next);
     }
 
-    /*
+    /**
+     * Appends new elements.
      * When pushing an object (array, NANOS, object), named keys are set
      * directly and index keys are appended as an offset from _next
      * (therefore preserving any gaps).
      * Push [ object ] to add the actual object itself.
+     * @param {...*} items
+     * @returns {this}
      */
     push (...items) {
 	if (this._locked) throw new TypeError('NANOS: Cannot push after locking');
@@ -275,7 +412,12 @@ export class NANOS {
 	return this;
     }
 
-    // NOTE: Only affects value returned by toString()
+    /**
+     * Redacts values from string output.
+     * NOTE: Only affects value returned by toString().
+     * @param {...(string|number|boolean)} keys
+     * @returns {this}
+     */
     redact (...keys) {
 	for (const key of keys) {
 	    if (key === true) this._redacted = true;
@@ -288,6 +430,12 @@ export class NANOS {
 	return this;
     }
 
+    /**
+     * Internal method to renumber indices.
+     * @param {number} from
+     * @param {number} to
+     * @param {number} by
+     */
     #renumber (from, to, by) {
 	const move = (k, by) => {
 	    if (Object.hasOwn(this._storage, k)) {
@@ -310,7 +458,10 @@ export class NANOS {
 	});
     }
 
-    // Reverse *in place*
+    /**
+     * Reverse *in place*.
+     * @returns {this}
+     */
     reverse () {
 	if (this._locked) throw new TypeError('NANOS: Cannot reverse after locking');
 	const s = this._storage, nks = [], ns = {}, last = this._next - 1;
@@ -325,18 +476,29 @@ export class NANOS {
 	return this;
     }
 
-    // Get/set reactive-interface object
+    /**
+     * Get/set reactive-interface object.
+     * @returns {object|undefined}
+     */
     get rio () { return this._rio; }
 
+    /**
+     * @param {object|undefined} r
+     */
     set rio (r) {
 	if (!r) delete this._rio;
 	else if ((r?.batch && r.changed && r.create && r.depend)) this._rio = r;
     }
 
-    /*
+    /**
+     * Sets a key-value pair.
      * If the key is undefined, the next sequential index is used.
      * New keys are added in the first (insert true) or last (insert false)
      * possible position that maintain increasing-index ordering constraints.
+     * @param {string|number} [key]
+     * @param {*} value
+     * @param {boolean} [insert=false]
+     * @returns {*}
      */
     set (key, value, insert = false) {
 	if (this._locked) throw new TypeError('NANOS: Cannot set after locking');
@@ -382,17 +544,30 @@ export class NANOS {
 	return value;
     }
 
+    /**
+     * Fluent interface for setting autoPromote.
+     * @param {boolean} v
+     * @returns {this}
+     */
     setAutoPromote (v) {
 	this._autoPromote = v;
 	return this;
     }
 
+    /**
+     * Fluent interface for setting the RIO.
+     * @param {object} r
+     * @returns {this}
+     */
     setRIO (r) {
 	this.rio = r;
 	return this;
     }
 
-    // Like Array.shift (only applies to indexed values)
+    /**
+     * Like Array.shift (only applies to indexed values).
+     * @returns {*}
+     */
     shift () {
 	if (this._locked) throw new TypeError('NANOS: Cannot shift after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot shift after index lock');
@@ -405,13 +580,20 @@ export class NANOS {
 	});
     }
 
-    // Size of list (# of keys / indexes)
+    /**
+     * Size of list (# of keys / indexes).
+     * @returns {number}
+     */
     get size () {
 	this._rio?.depend();
 	return this._keys.length;
     }
 
-    // Return a similarly-configured new NANOS
+    /**
+     * Return a similarly-configured new NANOS.
+     * @param {...*} items
+     * @returns {NANOS}
+     */
     similar (...items) {
 	const nn = new NANOS();
 	if (this._autoPromote) nn.autoPromote = true;
@@ -420,23 +602,39 @@ export class NANOS {
 	return nn;
     }
 
+    /**
+     * Gets the underlying storage object.
+     * @returns {object}
+     */
     get storage () {
 	this._rio?.depend();
 	return this._storage;
     }
 
+    /**
+     * Returns a reversed copy.
+     * @returns {NANOS}
+     */
     toReversed () {
 	this._rio?.depend();
 	return this.similar().fromPairs(this.toJSON()).reverse();
     }
 
-    // Might be the best we can do
+    /**
+     * Returns a JSON-representable object.
+     * Might be the best we can do.
+     * @returns {{type: string, next: number, pairs: Array<*>}}
+     */
     toJSON () {
 	this._rio?.depend();
 	return {type:'@NANOS@', next: this._next, pairs: this.pairs(true)};
     }
 
-    // Generate SLID (SysCL List Data)-format string
+    /**
+     * Generate SLID (SysCL List Data)-format string.
+     * @param {{compact?: boolean, redact?: boolean}} [options]
+     * @returns {string}
+     */
     toSLID ({ compact = false, redact = false } = {}) {
 	this._rio?.depend();
 	const escape = str => escapeJSString(str).replace(/\)]/g, ')\\]');
@@ -492,13 +690,21 @@ export class NANOS {
 	return '[(' + itemsToStr(this).replace(/\)\]/g, ')\\]') + ')]';
     }
 
+    /**
+     * Converts to a string (SLID format).
+     * @param {object} [options]
+     * @returns {string}
+     */
     toString (options = {}) {
 	return this.toSLID({ redact: true, ...options });
     }
 
-    /*
+    /**
+     * Prepends new elements.
      * Unshift works like push, except that indexed values are offset-from-0
      * inserted instead (therefore preserving any gaps).
+     * @param {...*} items
+     * @returns {this}
      */
     unshift (...items) {
 	if (this._locked) throw new TypeError('NANOS: Cannot unshift after locking');
@@ -523,12 +729,20 @@ export class NANOS {
 	return this;
     }
 
-    // Return a (non-sparse) iterator of *indexed* values [0.._next-1]
+    /**
+     * Return a (non-sparse) iterator of *indexed* values [0.._next-1].
+     * @yields {*}
+     */
     *values () {
 	this._rio?.depend();
 	for (let i = 0; i < this._next; ++i) yield this.at(i);
     }
 
+    /**
+     * Internal method to handle negative indices.
+     * @param {string|number} key
+     * @returns {string|number|undefined}
+     */
     #wrapKey (key) {
 	if (isNegIndex(key)) {
 	    key = parseInt(key, 10) + this._next;
@@ -562,7 +776,12 @@ const slidPats = {
 const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
 const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
 
-// Parse SLID-format data, returning (potentially nested) NANOS
+/**
+ * Parse SLID-format data, returning (potentially nested) NANOS.
+ * @param {string} str
+ * @param {boolean} [qj=false]
+ * @returns {NANOS}
+ */
 export function parseSLID (str, qj = false) {
     let match = str.match(/\[\((.*?)\)\]/s);
     if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
@@ -618,7 +837,11 @@ export function parseSLID (str, qj = false) {
 }
 NANOS.parseSLID = parseSLID;
 
-// Parse relaxed, "quasi-JSON" (by way of SLID)
+/**
+ * Parse relaxed, "quasi-JSON" (by way of SLID).
+ * @param {string} str
+ * @returns {NANOS}
+ */
 const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
 export function parseQJSON (str) {
     return parseSLID('[(' + str.replaceAll(/^\s*[\[\{]?|[\]\}]\s*$/g, '')
