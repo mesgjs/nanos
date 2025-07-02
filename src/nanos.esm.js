@@ -95,6 +95,20 @@ export class NANOS {
     }
 
     /**
+     * Freezes this NANOS and all nested NANOS values recursively.
+     * @returns {this}
+     */
+    deepFreeze () {
+        this.freeze();
+        for (const [key, value] of this.entries()) {
+            if (value instanceof NANOS) {
+                value.deepFreeze();
+            }
+        }
+        return this;
+    }
+
+    /**
      * Deletes a key-value pair.
      * NOTE: unlike the delete statement, this returns the deleted value!
      * @param {string|number} key
@@ -167,6 +181,22 @@ export class NANOS {
     forEach (f) {
 	this._rio?.depend();
 	for (const k of this._keys) f(this._storage[k], k, this);
+    }
+
+    /**
+     * Renders the NANOS completely locked and immutable.
+     * @returns {this}
+     */
+    freeze () {
+        if (!Object.isFrozen(this)) {
+            this._locked = true;
+            this._lockInd = true;
+            Object.freeze(this);
+        }
+        Object.freeze(this._keys);
+        Object.freeze(this._storage);
+        if (typeof this._redacted === 'object') Object.freeze(this._redacted);
+        return this;
     }
 
     /**
