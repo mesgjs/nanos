@@ -425,6 +425,10 @@ export class NANOS {
 
     /**
      * Parse relaxed, "quasi-JSON" (by way of SLID).
+     * The distinction between { } and [ ] is ignored.
+     * Values may be separated by commas or spaces.
+     * Text without special characters need not be quoted.
+     * Key-value pairs may be separated by `:` or `=`.
      * @param {string} str
      * @returns {NANOS}
      */
