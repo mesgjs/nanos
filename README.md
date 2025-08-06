@@ -106,7 +106,7 @@ Creates a new NANOS instance.
 
 ### `.at(key, [defVal])`
 Gets the value at a specified key or index. Negative indices are resolved relative to the end of the indexed portion.
-*   **`key`**: The key or index to look up.
+*   **`key`**: The key or index to look up, or an array of keys and/or indexes to recursively traverse.
 *   **`defVal`**: An optional default value to return if the key is not found.
 *   **Returns**: The value, or `defVal` if not found.
 *   Alias: `.get()`

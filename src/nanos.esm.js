@@ -57,11 +57,19 @@ export class NANOS {
 
     /**
      * Get value at key or index (negative index relative to end).
-     * @param {string|number} key
+     * @param {string|number|Array.<(string|number)>} key
      * @param {*} [defVal]
      * @returns {*}
      */
     at (key, defVal) {
+	if (Array.isArray(key)) {
+	    let next = this;
+	    for (const curKey of key) {
+		if (!(next instanceof NANOS) || !next.has(curKey)) return defVal;
+		next = next.at(curKey);
+	    }
+	    return next;
+	}
 	this._rio?.depend();
 	key = this.#wrapKey(key);
 	return Object.hasOwn(this._storage, key) ? this._storage[key] : defVal;
@@ -465,7 +473,11 @@ export class NANOS {
         }
         const parseRight = () => {	// More that can be right of =
             if (tokens[0] !== '[') {
-                if (!qj) switch (tokens[0]) {// Special values
+                if (qj) switch (tokens[0]) {
+		case 'false': tokens.shift(); return false;
+		case 'null': tokens.shift(); return null;
+		case 'true': tokens.shift(); return true;
+		} else switch (tokens[0]) {// Special values
                 case '@f': tokens.shift(); return false;
                 case '@n': tokens.shift(); return null;
                 case '@t': tokens.shift(); return true;
