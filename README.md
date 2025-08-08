@@ -106,13 +106,10 @@ Creates a new NANOS instance.
 
 ### `.at(key, [defVal])`
 Gets the value at a specified key or index. Negative indices are resolved relative to the end of the indexed portion.
-*   **`key`**: The key or index to look up, or an array of keys and/or indexes to recursively traverse.
+*   **`key`**: The key or index to look up, or an array of keys/indexes to recursively traverse.
 *   **`defVal`**: An optional default value to return if the key is not found.
 *   **Returns**: The value, or `defVal` if not found.
 *   Alias: `.get()`
-
-### `.autoPromote` (getter/setter)
-A boolean flag that, when `true`, automatically promotes plain objects and arrays to NANOS instances when they are added.
 
 ### `.clear()`
 Removes all key-value pairs from the instance. Throws an error if the instance is locked.
@@ -281,7 +278,7 @@ Reverses the order of all elements *in place*.
 ### `.rio` (getter/setter)
 Gets or sets the reactive-interface object for integration with UI frameworks.
 
-### `.set([key], value, [insert=false])`
+### `.set(key, value, [insert=false])`
 Sets a key-value pair. If `key` is `undefined`, the next sequential index is used.
 *   **`key`**: The key or index.
 *   **`value`**: The value to set.
@@ -290,11 +287,6 @@ Sets a key-value pair. If `key` is `undefined`, the next sequential index is use
 * In append mode (the default), new named values are added at the end, and indexed values are added at the last position that preserves ascending index order.
 * In insert mode, new named values are inserted at the beginning, and indexed values are added at the first position that preserves ascending index order.
 * Example: If the current keys are `['a', '1', 'b', '3', 'c']`, named values (with names other than `a`, `b`, or `c`) will be *inserted* before `a` or *appended* after `c`; a value with index 2 would be *inserted* before `b` (2 may not appear before 1, so this is the *first* eligible position in this key-set) or *appended* after `b` (2 may not appear after 3, so this is the *last* eligible position in this key-set).
-
-### `.setAutoPromote(v)`
-Fluent interface for setting the `autoPromote` flag.
-*   **`v`**: The boolean value to set.
-*   **Returns**: `this`.
 
 ### `.setRIO(r)`
 Fluent interface for setting the reactive-interface object (RIO).
@@ -330,6 +322,10 @@ Generates a SLID (Static List Data) formatted string.
 *   **`options`**: An object with `compact` and `redact` booleans.
 *   **Returns**: The SLID string.
 
+### `NANOS.toSLID(value, { options })` (static)
+Generatea a SLID-formatted string for `value`.
+*   **Returns**: The SLID string.
+
 ### `.toString(options)`
 Converts the instance to a SLID string, redacting sensitive data by default.
 
@@ -357,6 +353,40 @@ Checks if a given key is a valid, non-negative integer string.
 Checks if a given key is a valid negative integer string.
 *   **`key`**: The key to check.
 *   **Returns**: `true` if the key is a negative index.
+
+---
+
+## Object-Value Transformations
+
+| Context | Array | Map | NANOS | Object | Set |
+| --- | --- | --- | --- | --- | --- |
+| set/named (disabled) | original | original | original | original | original |
+| set/named (enabled) | NANOS | NANOS | original | NANOS | NANOS |
+| push/unshift (outer) | contents | contents | contents | contents | contents |
+| push/unshift (disabled) | original | original | original | original | original |
+| push/unshift (sets) | NANOS | contents | original | contents | NANOS |
+| push/unshift (all) | NANOS | NANOS | original | NANOS | NANOS |
+
+**KEY**:  
+set/named: Applies to `.set` operations and named (non-positional) values  
+push/unshift: Applies to `.push` and `.unshift` operations  
+disabled: Applies when the `transform` option is JavaScript-"falsey"  
+enabled: Applies when the `transform` option is JavaScript-"truthy"  
+sets: Applies when the `transform` option is `sets`  
+all: Applies when the `transform` option is `all`  
+outer: Applies to outer/top-level (as opposed to inner/nested) values:  
+`push(outerValue)` versus `push([ innerValue ], { key: innerValue })`  
+normal
+original: The original object value is used  
+contents: The object contents are added to/merged with the target NANOS  
+NANOS: A new NANOS object with equivalent content is used in place of the original value  
+
+**NOTES**:  
+- In `all` transformation mode, both set-ish (Array and transparent Set) inner values and map-ish (plain Object and transparent Map) inner values are transformed into nested NANOS values.
+- In `sets` transformation mode, set-ish inner values are transformed into nested NANOS values and map-ish inner values are merged into the containing NANOS.
+- In `sets` transformation mode, inner value sparseness is not preserved (e.g., for `['first',{key:'value'},'last']`, `last` is at index 1 of the NANOS, even though it's at index 2 of the input).
+- "Map"-column entries only apply when transparent (i.e., `opaqueMaps` mode is not enabled)  
+- "Set"-column entries only apply when transparent (i.e., `opaqueSets` mode is not enabled)
 
 ---
 

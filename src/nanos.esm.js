@@ -22,7 +22,7 @@ const slidPats = {
     spc: '\\s+',		// Space
     oth: '(?:[^\'"/[=\\]\\s]|\\/(?![*]))+',	// Other
 };
-const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map(k => slidPats[k]).join('|') + ')', 's');
+const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map((k) => slidPats[k]).join('|') + ')', 's');
 const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
 
 const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
@@ -34,13 +34,26 @@ const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
  * @param {string} key
  * @returns {boolean}
  */
-export const isIndex = key => /^(?:0|[1-9]\d*)$/.test(key);
+export const isIndex = (key) => /^(?:0|[1-9]\d*)$/.test(key);
+
 /**
  * Checks if a key is a negative index.
  * @param {string} key
  * @returns {boolean}
  */
-export const isNegIndex = key => /^-[1-9]\d*$/.test(key);
+export const isNegIndex = (key) => /^-[1-9]\d*$/.test(key);
+
+/**
+ * Checks if a value is a plain object.
+ * @param {*} value
+ * @returns {boolean}
+ */
+const isPlainObject = (value) => {
+    if (typeof value !== 'object' || value === null) return false;
+    const consName = value?.constructor?.name;
+    return (consName === undefined || consName === 'Object');
+};
+
 /**
  * Named and Numbered Ordered Storage.
  * @class
@@ -51,6 +64,7 @@ export class NANOS {
      * @param {...*} items
      */
     constructor (...items) {
+	this._options = {};
 	this.clear();
 	this.push(...items);
     }
@@ -76,18 +90,6 @@ export class NANOS {
     }
 
     /**
-     * Gets the auto-promote flag.
-     * @returns {boolean}
-     */
-    get autoPromote () { return this._autoPromote; }
-
-    /**
-     * Sets the auto-promote flag.
-     * @param {boolean} v
-     */
-    set autoPromote (v) { this._autoPromote = v; }
-
-    /**
      * Clears the NANOS instance.
      * @returns {this}
      */
@@ -107,13 +109,13 @@ export class NANOS {
      * @returns {this}
      */
     deepFreeze () {
-        this.freeze();
-        for (const [key, value] of this.entries()) {
-            if (value instanceof NANOS) {
-                value.deepFreeze();
-            }
-        }
-        return this;
+	this.freeze();
+	for (const [key, value] of this.entries()) {
+	    if (value instanceof NANOS) {
+		value.deepFreeze();
+	    }
+	}
+	return this;
     }
 
     /**
@@ -124,11 +126,11 @@ export class NANOS {
      */
     delete (key) {
 	if (this._locked) throw new TypeError('NANOS: Cannot delete after locking');
-	const skey = '' + key;
+	const skey = String(key);
 	const ret = this._storage[skey];
 	if (Object.hasOwn(this._storage, skey)) {
 	    delete this._storage[skey];
-	    this._keys = this._keys.filter(k => k !== skey);
+	    this._keys = this._keys.filter((k) => k !== skey);
 	    this._rio?.changed();
 	}
 	return ret;
@@ -146,7 +148,7 @@ export class NANOS {
      */
     *entries (compact = false) {
 	this._rio?.depend();
-	const ik = compact ? (k => isIndex(k) ? parseInt(k, 10) : k) : (k => k);
+	const ik = compact ? ((k) => isIndex(k) ? parseInt(k, 10) : k) : ((k) => k);
 	for (const k of this._keys) yield [ ik(k), this._storage[k] ];
     }
 
@@ -157,7 +159,9 @@ export class NANOS {
      */
     filter (f) {
 	this._rio?.depend();
-	return new NANOS.fromEntries([...this.entries()].filter(kv => f(kv[1], kv[0], this)));
+	const result = new this.constructor();
+	result.fromEntries([...this.entries()].filter((kv) => f(kv[1], kv[0], this)));
+	return result;
     }
 
     /**
@@ -196,15 +200,15 @@ export class NANOS {
      * @returns {this}
      */
     freeze () {
-        if (!Object.isFrozen(this)) {
-            this._locked = true;
-            this._lockInd = true;
-            Object.freeze(this);
-        }
-        Object.freeze(this._keys);
-        Object.freeze(this._storage);
-        if (typeof this._redacted === 'object') Object.freeze(this._redacted);
-        return this;
+	if (!Object.isFrozen(this)) {
+	    this._locked = true;
+	    this._lockInd = true;
+	    Object.freeze(this);
+	}
+	Object.freeze(this._keys);
+	Object.freeze(this._storage);
+	if (typeof this._redacted === 'object') Object.freeze(this._redacted);
+	return this;
     }
 
     /**
@@ -216,7 +220,7 @@ export class NANOS {
     fromEntries (entries, insert = false) {
 	if (this._locked) throw new TypeError('NANOS: Cannot fromEntries after locking');
 	if (insert && this._lockInd) throw new TypeError('NANOS: Cannot insert fromEntries after index lock');
-	const batch = this._rio?.batch || (cb => cb());
+	const batch = this._rio?.batch || ((cb) => cb());
 	batch(() => {
 	    if (insert) for (const e of [...entries].reverse()) this.set(e[0], e[1], true);
 	    else for (const e of entries) this.set(e[0], e[1]);
@@ -234,7 +238,7 @@ export class NANOS {
      */
     fromPairs (...pairs) {
 	if (this._locked) throw new TypeError('NANOS: Cannot fromPairs after locking');
-	const batch = this._rio?.batch || (cb => cb());
+	const batch = this._rio?.batch || ((cb) => cb());
 	if (pairs[0]?.type === '@NANOS@') {
 	    batch(() => {
 		this.fromPairs(pairs[0].pairs);
@@ -324,7 +328,7 @@ export class NANOS {
      * @param {*} value
      * @returns {string|number|undefined}
      */
-    keyOf (value) { return this.find(v => v === value)?.[0]; }
+    keyOf (value) { return this.find((v) => v === value)?.[0]; }
 
     /**
      * Returns an iterator for the keys.
@@ -341,7 +345,7 @@ export class NANOS {
      * @returns {string|number|undefined}
      */
     lastKeyOf (value) {
-	return this.findLast(v => v === value)?.[0];
+	return this.findLast((v) => v === value)?.[0];
     }
 
     /**
@@ -385,6 +389,15 @@ export class NANOS {
     }
 
     /**
+     * Determine if a value is map-like (key: value, ...).
+     * @param {*} value
+     * @returns {boolean}
+     */
+    #mapish (value) {
+	return (isPlainObject(value) || (!this._options.opaqueMaps && value instanceof Map));
+    }
+
+    /**
      * Iterates over named entries.
      * @yields {[string, *]}
      */
@@ -423,6 +436,14 @@ export class NANOS {
     }
 
     /**
+     * Return the current options.
+     * @returns {object}
+     */
+    get options () {
+	return Object.assign({}, this._options);
+    }
+
+    /**
      * Returns a flat array of key-value pairs.
      * @param {boolean} [compact=false]
      * @returns {Array<*>}
@@ -441,10 +462,10 @@ export class NANOS {
      * @returns {NANOS}
      */
     static parseQJSON (str) {
-        return parseSLID('[(' + str.replaceAll(/^\s*[\[\{]?|[\]\}]\s*$/g, '')
-        .split(/("(?:\\\\"|[^"])*")/)
-        .map(s => (s[0] === '"') ? s : s.replace(/[{},:]/g, c => qjMap[c]))
-        .join('') + ')]', true);
+	return parseSLID('[(' + str.replaceAll(/^\s*[\[\{]?|[\]\}]\s*$/g, '')
+	.split(/("(?:\\\\"|[^"])*")/)
+	.map((s) => (s[0] === '"') ? s : s.replace(/[{},:]/g, (c) => qjMap[c]))
+	.join('') + ')]', true);
     }
 
     /**
@@ -454,61 +475,61 @@ export class NANOS {
      * @returns {NANOS}
      */
     static parseSLID (str, qj = false) {
-        let match = str.match(/\[\((.*?)\)\]/s);
-        if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
-        const tokens = match[1].replace(/\)\\\]/g, ')]').split(slidRE).filter(t => !/^(\s*|\/\*.*\*\/)$/.test(t));
-        match = undefined;
-        const parseLeft = () => {	// Can be left of = (numbers, strings)
-            const token = tokens.shift();
-            if (slidNum.test(token)) {
-                if (/n$/i.test(token)) return BigInt(token.slice(0, -1));
-                if (/^[+-]?0b/i.test(token)) return parseInt(token.replace(/0b/i, ''), 2);
-                if (/^[+-]?0o/i.test(token)) return parseInt(token.replace(/0o/i, ''), 8);
-                if (/^[+-]?0x/i.test(token)) return parseInt(token.replace(/0x/i, ''), 16);
-                return parseFloat(token);
-            }
-            if (token === "'" || token === '"') throw new SyntaxError(`Unmatched ${token} in SLID`);
-            if (token[0] !== "'" && token[0] !== '"') return token;
-            return unescapeJSString(token.slice(1, -1));
-        }
-        const parseRight = () => {	// More that can be right of =
-            if (tokens[0] !== '[') {
-                if (qj) switch (tokens[0]) {
+	let match = str.match(/\[\((.*?)\)\]/s);
+	if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
+	const tokens = match[1].replace(/\)\\\]/g, ')]').split(slidRE).filter((t) => !/^(\s*|\/\*.*\*\/)$/.test(t));
+	match = undefined;
+	const parseLeft = () => {	// Can be left of = (numbers, strings)
+	    const token = tokens.shift();
+	    if (slidNum.test(token)) {
+		if (/n$/i.test(token)) return BigInt(token.slice(0, -1));
+		if (/^[+-]?0b/i.test(token)) return parseInt(token.replace(/0b/i, ''), 2);
+		if (/^[+-]?0o/i.test(token)) return parseInt(token.replace(/0o/i, ''), 8);
+		if (/^[+-]?0x/i.test(token)) return parseInt(token.replace(/0x/i, ''), 16);
+		return parseFloat(token);
+	    }
+	    if (token === "'" || token === '"') throw new SyntaxError(`Unmatched ${token} in SLID`);
+	    if (token[0] !== "'" && token[0] !== '"') return token;
+	    return unescapeJSString(token.slice(1, -1));
+	}
+	const parseRight = () => {	// More that can be right of =
+	    if (tokens[0] !== '[') {
+		if (qj) switch (tokens[0]) {
 		case 'false': tokens.shift(); return false;
 		case 'null': tokens.shift(); return null;
 		case 'true': tokens.shift(); return true;
 		} else switch (tokens[0]) {// Special values
-                case '@f': tokens.shift(); return false;
-                case '@n': tokens.shift(); return null;
-                case '@t': tokens.shift(); return true;
-                case '@u': tokens.shift(); return undefined;
-                }
-                return parseLeft();	// Everything OK on the left
-            }
-            tokens.shift();
-            return parseItems();	// Nested lists
-        }
-        function parseItems () {
-            const result = new NANOS();
-            while (tokens.length && tokens[0] !== ']') {
-                let key;			// Default: positional
-                if (tokens[1] === '=') {	// Named value
-                    key = parseLeft();
-                    tokens.shift();
-                } else if (!qj && tokens[0] === '@e') {	// Empty
-                    tokens.shift();
-                    ++result.next;
-                    continue;
-                }
-                result.set(key, parseRight());
-            }
-            if (tokens[0] === ']') tokens.shift();
-            return result;
-        }
-        const result = parseItems();
-        // SLID was malformed if any tokens are left
-        if (tokens.length) throw new SyntaxError('Malformed SLID');
-        return result;
+		case '@f': tokens.shift(); return false;
+		case '@n': tokens.shift(); return null;
+		case '@t': tokens.shift(); return true;
+		case '@u': tokens.shift(); return undefined;
+		}
+		return parseLeft();	// Everything OK on the left
+	    }
+	    tokens.shift();
+	    return parseItems();	// Nested lists
+	}
+	function parseItems () {
+	    const result = new this.constructor();
+	    while (tokens.length && tokens[0] !== ']') {
+		let key;			// Default: positional
+		if (tokens[1] === '=') {	// Named value
+		    key = parseLeft();
+		    tokens.shift();
+		} else if (!qj && tokens[0] === '@e') {	// Empty
+		    tokens.shift();
+		    ++result.next;
+		    continue;
+		}
+		result.set(key, parseRight());
+	    }
+	    if (tokens[0] === ']') tokens.shift();
+	    return result;
+	}
+	const result = parseItems();
+	// SLID was malformed if any tokens are left
+	if (tokens.length) throw new SyntaxError('Malformed SLID');
+	return result;
     }
 
     /**
@@ -524,32 +545,52 @@ export class NANOS {
 
     /**
      * Appends new elements.
-     * When pushing an object (array, NANOS, object), named keys are set
-     * directly and index keys are appended as an offset from _next
+     * When pushing transparent objects (array, NANOS, object), named keys
+     * are set directly and index keys are appended as an offset from _next
      * (therefore preserving any gaps).
      * Push [ object ] to add the actual object itself.
-     * @param {...*} items
+     * @param {...*} values
      * @returns {this}
      */
-    push (...items) {
+    push (...values) {
 	if (this._locked) throw new TypeError('NANOS: Cannot push after locking');
-	const batch = this._rio?.batch || (cb => cb());
-	batch(() => items.forEach(value => {
+	const batch = this._rio?.batch || ((cb) => cb());
+	const options = this._options, transform = options.transform;
+	const pushEntries = (entries) => {
 	    const base = this._next;
-	    if (value instanceof NANOS || value instanceof Map) {
-		for (const e of value.entries()) {
-		    if (isIndex(e[0])) this.set(base + parseInt(e[0], 10), e[1]);
-		    else this.set(e[0], e[1]);
+	    for (const [key, value] of entries) {
+		if (isIndex(key)) {
+		    // Positional: preserve sparseness, potentially transforming
+		    // map-ish and set-ish values into nested NANOS
+		    const newKey = base + parseInt(key, 10);
+		    if (transform && (this.#mapish(value) || this.#setish(value))) value = this.similar(value);
+		    this.set(newKey, value);
+		} else this.set(key, value);
+	    }
+	};
+	const mergeMaps = (entries) => {
+	    for (let [key, value] of entries) {
+		if (isIndex(key)) {
+		    // Positional maps get merged; positional sets become nested NANOS
+		    if (this.#mapish(value)) mergeMaps((new this.constructor(value)).entries());
+		    else {
+			if (this.#setish(value)) value = this.similar(value);
+			this.set(undefined, value);
+		    }
+		} else {
+		    // Named values just get set (promoting transparent containers)
+		    this.set(key, value);
 		}
-	    } else if (value instanceof Set) {
-                this.push(...value);
-            } else if (typeof value === 'object') {
-		for (const k of Object.keys(value)) {
-		    if (isIndex(k)) this.set(base + parseInt(k, 10), value[k]);
-		    else this.set(k, value[k]);
-		}
-	    } else this.set(this._next, value);
-	}));
+	    }
+	};
+	const pushInner = (transform === 'sets') ? mergeMaps : pushEntries;
+	const pushOuter = (outer) => {
+	    if (isPlainObject(outer)) pushInner(Object.entries(outer));
+	    else if (this.#useEntries(outer)) pushInner(outer.entries());
+	    else if (!options.opaqueSets && outer instanceof Set) pushInner([...outer.values()].entries());
+	    else this.set(undefined, outer);
+	};
+	batch(() => values.forEach(pushOuter));
 	return this;
     }
 
@@ -592,7 +633,7 @@ export class NANOS {
 	    if (to >= this._next) this._next += by;
 	    for (let k = from; k < to; ++k) move(k, by);
 	}
-	if (by) this._keys = this._keys.map(key => {
+	if (by) this._keys = this._keys.map((key) => {
 	    const ind = isIndex(key) && parseInt(key, 10);
 	    if (ind !== false && ind >= from && ind < to) return ind + by + '';
 	    return key;
@@ -615,6 +656,19 @@ export class NANOS {
 	this._keys = nks;
 	this._rio?.changed();
 	return this;
+    }
+
+    /**
+     * Returns an iterator of [key, value] pairs in reverse (last-to-first key order).
+     * Compact mode uses numeric index keys instead of the standard strings
+     * (e.g. 0 instead of '0').
+     * @param {boolean} [compact=false]
+     * @yields {[string|number, *]}
+     */
+    *reverseEntries (compact = false) {
+	this._rio?.depend();
+	const ik = compact ? ((k) => isIndex(k) ? parseInt(k, 10) : k) : ((k) => k);
+	for (const k of this._keys.toReversed()) yield [ ik(k), this._storage[k] ];
     }
 
     /**
@@ -646,14 +700,17 @@ export class NANOS {
 	if (key === undefined) key = this._next;
 	key = this.#wrapKey(key);
 	if (key === undefined) return;
-	const skey = '' + key;
+	const skey = String(key);
 	const ind = isIndex(skey) && parseInt(skey, 10);
 	let changed = false;
+
 	if (!Object.hasOwn(this._storage, skey)) {
+	    // The key or index is new; add it in the proper place
 	    changed = true;
 	    if (insert) {
 		if (ind === false || !this._next) this._keys.unshift(skey);
 		else {
+		    // Earliest placement maintaining ascending index order
 		    let ki = this._keys.length;
 		    while (ki > 0 && (!isIndex(this._keys[ki - 1]) || ind < this._keys[ki - 1])) --ki;
 		    this._keys.splice(ki, 0, skey);
@@ -661,6 +718,7 @@ export class NANOS {
 	    } else { // append
 		if (ind === false || ind >= this._next) this._keys.push(skey);
 		else {
+		    // Latest placement maintaining ascending index order
 		    let ki = 0;
 		    while (ki < this._keys.length && (!isIndex(this._keys[ki]) || ind > this._keys[ki])) ++ki;
 		    this._keys.splice(ki, 0, skey);
@@ -668,30 +726,39 @@ export class NANOS {
 	    }
 	    if (ind !== false && ind >= this._next) this._next = ind + 1;
 	}
-	if (typeof value === 'object' && this._autoPromote && value !== null) {
-	    switch (value?.constructor?.name) {
-	    case undefined:
-	    case 'Array':
-	    case 'Object':
-		this._storage[skey] = this.similar(value);
-		break;
-	    default:
-		this._storage[skey] = value;
-		break;
-	    }
-	} else this._storage[skey] = value;
+
+	if (this._options.transform && (this.#setish(value) || this.#mapish(value))) {
+	    // Convert transparent containers to NANOS
+	    this._storage[skey] = this.similar(value);
+	} else {
+	    this._storage[skey] = value;
+	}
 	if (this._lockNew) this.lock(skey);
 	if (changed) this._rio?.changed();
 	return value;
     }
 
     /**
-     * Fluent interface for setting autoPromote.
-     * @param {boolean} v
-     * @returns {this}
+     * Determine if a value is set-like (value, ...).
+     * @param {*} value
+     * @returns {boolean}
      */
-    setAutoPromote (v) {
-	this._autoPromote = v;
+    #setish (value) {
+	return (Array.isArray(value) || (!this._options.opaqueSets && value instanceof Set));
+    }
+
+    /**
+     * Set (merge) options
+     * @param {object} options
+     * @returns {this}
+     *
+     * opaqueMaps - Treat Map objects as opaque
+     * opaqueSets - Treat Set objects as opaque
+     * transform - Promote map-ish or set-ish values into nested NANOS objects,
+     *     or merge them into the containing NANOS object, depending on the setting
+     */
+    setOptions (options) {
+	Object.assign(this._options, options);
 	return this;
     }
 
@@ -713,7 +780,7 @@ export class NANOS {
 	if (this._locked) throw new TypeError('NANOS: Cannot shift after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot shift after index lock');
 	if (!this._next) return undefined;
-	const batch = this._rio?.batch || (cb => cb());
+	const batch = this._rio?.batch || ((cb) => cb());
 	return batch(() => {
 	    const res = this.delete(0);
 	    this.#renumber(1, this._next, -1);
@@ -736,8 +803,8 @@ export class NANOS {
      * @returns {NANOS}
      */
     similar (...items) {
-	const nn = new NANOS();
-	if (this._autoPromote) nn.autoPromote = true;
+	const nn = new this.constructor();
+	nn.setOptions(this._options);
 	nn.rio = this._rio?.create();
 	if (items.length) nn.push(...items);
 	return nn;
@@ -778,7 +845,7 @@ export class NANOS {
      */
     toSLID ({ compact = false, redact = false } = {}) {
 	this._rio?.depend();
-	const escape = str => escapeJSString(str).replace(/\)]/g, ')\\]');
+	const escape = (str) => escapeJSString(str).replace(/\)]/g, ')\\]');
 	function squished (items) {
 	    const parts = [];
 	    for (const item of items) {
@@ -804,6 +871,7 @@ export class NANOS {
 		if (/^[!()*.,:;<>?A-Z{}_][!()*.,0-9:;<>?@A-Z{}_-]*$/i.test(value)) return value;
 		return "'" + escape(value) + "'";
 	    }
+	    if (isPlainObject(value) || Array.isArray(value) || value instanceof Map || value instanceof Set) value = new this.constructor(value);
 	    if (value instanceof NANOS) return '[' + itemsToStr(value) + ']';
 	    return '@u/*??*/';
 	};
@@ -847,27 +915,26 @@ export class NANOS {
      * @param {...*} items
      * @returns {this}
      */
-    unshift (...items) {
+    unshift (...values) {
 	if (this._locked) throw new TypeError('NANOS: Cannot unshift after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot unshift after index lock');
-	const batch = this._rio?.batch || (cb => cb());
-	batch(() => items.toReversed().forEach(value => {
-	    if (value instanceof NANOS) {
-		this.#renumber(0, this._next, value.next);
-		this.fromEntries(value.entries(), true);
-	    } else if (value instanceof Map) {
-                const next = Array.from(value.keys()).filter(k => isIndex(k)).reduce((acc, cur) => Math.max(acc, cur), -1) + 1;
-                this.#renumber(0, this._next, next);
-                this.fromEntries(value.entries(), true);
-            } else if (value instanceof Set) {
-                this.unshift(...value)
-            } else if (typeof value === 'object') {
-		const next = Array.isArray(value) ? value.length : Object.keys(value).filter(k => isIndex(k)).reduce((acc, cur) => Math.max(acc, cur), -1) + 1;
-		this.#renumber(0, this._next, next);
-		this.fromEntries(Object.entries(value), true);
-	    } else this.unshift([value]);
-	}));
+	const batch = this._rio?.batch || ((cb) => cb());
+	// Unshift is essentially ".push(new).push(existing)", except performed in-place
+	const aggregate = this.similar(...values);
+	batch(() => {
+	    this.#renumber(0, this._next, aggregate.next);
+	    this.fromEntries(aggregate.entries());
+	});
 	return this;
+    }
+
+    /**
+     * Can value.entries() be used for iteration?
+     * @param {*} value
+     * @returns {boolean}
+     */
+    #useEntries (value) {
+	return (Array.isArray(value) || (value instanceof NANOS) || (!this._options.opaqueMaps && value instanceof Map));
     }
 
     /**
@@ -896,8 +963,13 @@ export class NANOS {
 // Alias .get() to .at()
 NANOS.prototype.get = NANOS.prototype.at;
 
+NANOS.toSLID = (value, options = {}) => {
+    if (value instanceof NANOS) return value.toSLID(options);
+    else return new NANOS(value).toSLID(options);
+};
+
 // Make parseQJSON and parseSLID directly importable
-export const { parseQJSON, parseSLID } = NANOS;
+export const { parseQJSON, parseSLID, toSLID } = NANOS;
 export { NANOS as default };
 
 // END
