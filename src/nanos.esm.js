@@ -304,7 +304,7 @@ export class NANOS {
      */
     isLocked (key) {
 	this._rio?.depend();
-	if (key === undefined) return this._locked;	// Key-set locked
+	if (key === undefined) return !!this._locked;	// Key-set locked
 	key = this.#wrapKey(key);
 	if (this._locked && !Object.hasOwn(this._storage, key)) return true;
 	return !Object.getOwnPropertyDescriptor(this._storage, key)?.writable;
@@ -319,8 +319,8 @@ export class NANOS {
 	this._rio?.depend();
 	if (this._redacted === true) return true;
 	key = this.#wrapKey(key);
-	if (isIndex(key)) return this._redacted?.[0];
-	return this._redacted?.[key];
+	if (isIndex(key)) return !!this._redacted?.[0];
+	return !!this._redacted?.[key];
     }
 
     /**
@@ -354,7 +354,7 @@ export class NANOS {
      * @returns {this}
      */
     lock (...keys) {
-	if (typeof keys[0] === 'object') key = keys[0];
+	if (keys.length === 1 && Array.isArray(keys[0])) keys = keys[0];
 	for (let key of keys) {
 	    key = this.#wrapKey(key);
 	    if (isIndex(key)) this._lockInd = true;
@@ -374,12 +374,12 @@ export class NANOS {
      */
     lockAll (andNew = false) {
 	if (andNew) this._lockNew = true;
-	this.lock(this._keys.values());
+	this.lock(this._keys);
 	return this;
     }
 
     /**
-     * Lock the *key* set (unlocked values can still change).
+     * Lock the *key* set (no new keys or indexes, but unlocked values can still change).
      * @returns {this}
      */
     lockKeys () {
@@ -507,10 +507,10 @@ export class NANOS {
 		return parseLeft();	// Everything OK on the left
 	    }
 	    tokens.shift();
-	    return parseItems();	// Nested lists
+	    return parseItems.call(this);	// Nested lists
 	}
-	function parseItems () {
-	    const result = new this.constructor();
+	const parseItems = () => {
+	    const result = new NANOS();
 	    while (tokens.length && tokens[0] !== ']') {
 		let key;			// Default: positional
 		if (tokens[1] === '=') {	// Named value
@@ -648,7 +648,7 @@ export class NANOS {
 	if (this._locked) throw new TypeError('NANOS: Cannot reverse after locking');
 	const s = this._storage, nks = [], ns = {}, last = this._next - 1;
 	for (const ok of this._keys.toReversed()) {
-	    const nk = isIndex(ok) ? (last - ok) : ok;
+	    const nk = isIndex(ok) ? String(last - parseInt(ok, 10)) : ok;
 	    ns[nk] = s[ok];
 	    nks.push(nk);
 	}

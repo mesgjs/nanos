@@ -275,6 +275,11 @@ Hides specified values from `toString()` or `toSLID()` output.
 Reverses the order of all elements *in place*.
 *   **Returns**: `this`.
 
+### `.reverseEntries([compact=false])`
+Returns an iterator that yields `[key, value]` pairs in reverse (last-to-first) key order.
+*   **`compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **Returns**: An iterator for all entries in reverse order.
+
 ### `.rio` (getter/setter)
 Gets or sets the reactive-interface object for integration with UI frameworks.
 
@@ -287,6 +292,14 @@ Sets a key-value pair. If `key` is `undefined`, the next sequential index is use
 * In append mode (the default), new named values are added at the end, and indexed values are added at the last position that preserves ascending index order.
 * In insert mode, new named values are inserted at the beginning, and indexed values are added at the first position that preserves ascending index order.
 * Example: If the current keys are `['a', '1', 'b', '3', 'c']`, named values (with names other than `a`, `b`, or `c`) will be *inserted* before `a` or *appended* after `c`; a value with index 2 would be *inserted* before `b` (2 may not appear before 1, so this is the *first* eligible position in this key-set) or *appended* after `b` (2 may not appear after 3, so this is the *last* eligible position in this key-set).
+
+### `.setOptions(options)`
+Sets (merges) options for the NANOS instance.
+*   **`options`**: An object containing options to set.
+    *   `opaqueMaps`: If `true`, `Map` objects are treated as opaque values and not introspected.
+    *   `opaqueSets`: If `true`, `Set` objects are treated as opaque values and not introspected.
+    *   `transform`: A string that controls how object-like values are handled when being set or pushed. See the [Object-Value Transformations](#object-value-transformations) section for details.
+*   **Returns**: `this`.
 
 ### `.setRIO(r)`
 Fluent interface for setting the reactive-interface object (RIO).
