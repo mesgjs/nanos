@@ -31,3 +31,7 @@ Deno.test("NANOS isLocked", () => {
     n.lockKeys();
     assertEquals(n.isLocked(), true);
 });
+
+// Missing: confirm all operations that should throw when locked actually do:
+// clear, delete, fromEntries, fromPairs, next (setter), pop, push, reverse,
+// shift, unshift
