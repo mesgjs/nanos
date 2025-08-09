@@ -239,7 +239,7 @@ export class NANOS {
     fromPairs (...pairs) {
 	if (this._locked) throw new TypeError('NANOS: Cannot fromPairs after locking');
 	const batch = this._rio?.batch || ((cb) => cb());
-	if (pairs[0]?.type === '@NANOS@') {
+	if (isPlainObject(pairs[0]) && pairs[0].type === '@NANOS@') {
 	    batch(() => {
 		this.fromPairs(pairs[0].pairs);
 		this.next = pairs[0].next;
@@ -914,7 +914,7 @@ export class NANOS {
     /**
      * Prepends new elements.
      * Unshift works like push, except that indexed values are offset-from-0
-     * inserted instead (therefore preserving any gaps).
+     * inserted instead (preserving sparseness except for transform sets).
      * @param {...*} items
      * @returns {this}
      */
@@ -923,7 +923,7 @@ export class NANOS {
 	if (this._lockInd) throw new TypeError('NANOS: Cannot unshift after index lock');
 	const batch = this._rio?.batch || ((cb) => cb());
 	batch(() => values.toReversed().forEach((outer) => {
-	    if (!(outer instanceof NANOS)) outer = new this.constructor(outer);
+	    if (!(outer instanceof NANOS)) outer = this.similar(outer);
 	    this.#renumber(0, this._next, outer.next);
 	    this.fromEntries(outer.entries(), true);
 	}));

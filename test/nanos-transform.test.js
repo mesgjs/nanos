@@ -41,6 +41,13 @@ Deno.test('NANOS transform: push outer', () => {
     assertEquals(n.pairs(true), [0, 1, 1, 2, 'a', 1, 'b', 1, 2, 1]);
 });
 
+Deno.test('NANOS transform: unshift outer', () => {
+    const n = new NANOS();
+    const a = [1, 2], m = new Map([['a', 1]]), o = { b: 1 }, s = new Set([1]);
+    n.unshift(a, m, o, s);
+    assertEquals(n.pairs(true), [0, 1, 1, 2, 'a', 1, 'b', 1, 2, 1]);
+});
+
 Deno.test('NANOS transform: push inner disabled', () => {
     const n = new NANOS();
     const a = [1, 2], m = new Map([['a', 1]]), o = { a: 1 }, s = new Set([1]);
@@ -51,10 +58,34 @@ Deno.test('NANOS transform: push inner disabled', () => {
     assert(n.at(3) === s);
 });
 
+Deno.test('NANOS transform: shift inner disabled', () => {
+    const n = new NANOS();
+    const a = [1, 2], m = new Map([['a', 1]]), o = { a: 1 }, s = new Set([1]);
+    n.unshift([a], [m], [o], [s]);
+    assert(n.at(0) === a);
+    assert(n.at(1) === m);
+    assert(n.at(2) === o);
+    assert(n.at(3) === s);
+});
+
 Deno.test('NANOS transform: push inner "sets"', () => {
     const n = new NANOS().setOptions({ transform: 'sets' });
     const a = [1, 2], m = new Map([['a', 1]]), o = { b: 1 }, s = new Set([1]);
     n.push([a], [m], [o], [s]);
+    assertEquals(n.size, 4);
+    assertEquals(n.next, 2);
+    assert(n.at(0) instanceof NANOS); // a
+    assertEquals(n.at('a'), 1); // ...m
+    assertEquals(n.at('b'), 1); // ...o
+    assert(n.at(1) instanceof NANOS); // s
+    assertEquals(n.at(0).pairs(true), [0, 1, 1, 2]);
+    assertEquals(n.at(1).pairs(true), [0, 1]);
+});
+
+Deno.test('NANOS transform: unshift inner "sets"', () => {
+    const n = new NANOS().setOptions({ transform: 'sets' });
+    const a = [1, 2], m = new Map([['a', 1]]), o = { b: 1 }, s = new Set([1]);
+    n.unshift([a], [m], [o], [s]);
     assertEquals(n.size, 4);
     assertEquals(n.next, 2);
     assert(n.at(0) instanceof NANOS); // a
@@ -81,9 +112,36 @@ Deno.test('NANOS transform: push nested inner "sets"', () => {
     assert(n.at(1) instanceof NANOS);
 });
 
+Deno.test('NANOS transform: unshift nested inner "sets"', () => {
+    const n = new NANOS().setOptions({ transform: 'sets' });
+    n.unshift(['a', {b: 1}, ['c', {d: 1}]]);
+    assertEquals(n.toSLID(), '[(a b=1 [c d=1])]');
+    assertEquals(n.size, 3);
+    assertEquals(n.next, 2);
+    assert(n.at(1) instanceof NANOS);
+
+    n.clear();
+    n.unshift(new Set(['a', new Map([['b', 1]]), new Set(['c', new Map([['d', 1]])])]));
+    assertEquals(n.toSLID(), '[(a b=1 [c d=1])]');
+    assertEquals(n.size, 3);
+    assertEquals(n.next, 2);
+    assert(n.at(1) instanceof NANOS);
+});
+
 Deno.test('NANOS transform: push deeply nested', () => {
     const n = new NANOS().setOptions({ transform: 'all' });
     n.push(['contents', [ [ [ 'deep' ] ] ] ]);
+    assertEquals(n.at(0), 'contents');
+    assert(n.at(1) instanceof NANOS);
+    assert(n.at([1, 0]) instanceof NANOS);
+    assert(n.at([1, 0, 0]) instanceof NANOS);
+    assertEquals(n.at([1, 0, 0, 0]), 'deep');
+    assertEquals(n.toSLID(), '[(contents [[[deep]]])]');
+});
+
+Deno.test('NANOS transform: unshift deeply nested', () => {
+    const n = new NANOS().setOptions({ transform: 'all' });
+    n.unshift(['contents', [ [ [ 'deep' ] ] ] ]);
     assertEquals(n.at(0), 'contents');
     assert(n.at(1) instanceof NANOS);
     assert(n.at([1, 0]) instanceof NANOS);
@@ -98,10 +156,30 @@ Deno.test('NANOS transform: push inner merge map-ish with "sets"', () => {
     assertEquals(n.pairs(true), ['a', 1, 'b', 2]);
 });
 
+Deno.test('NANOS transform: unshift inner merge map-ish with "sets"', () => {
+    const n = new NANOS().setOptions({ transform: 'sets' });
+    n.unshift({ a: 1 }, new Map([['b', 2]]));
+    assertEquals(n.pairs(true), ['a', 1, 'b', 2]);
+});
+
 Deno.test('NANOS transform: push inner "all"', () => {
     const n = new NANOS().setOptions({ transform: 'all' });
     const a = [1, 2], m = new Map([['a', 1]]), o = { a: 1 }, s = new Set([1]);
     n.push([a], [m], [o], [s]);
+    assert(n.at(0) instanceof NANOS);
+    assert(n.at(1) instanceof NANOS);
+    assert(n.at(2) instanceof NANOS);
+    assert(n.at(3) instanceof NANOS);
+    assertEquals(n.at(0).pairs(true), [0, 1, 1, 2]);
+    assertEquals(n.at(1).pairs(true), ['a', 1]);
+    assertEquals(n.at(2).pairs(true), ['a', 1]);
+    assertEquals(n.at(3).pairs(true), [0, 1]);
+});
+
+Deno.test('NANOS transform: unshift inner "all"', () => {
+    const n = new NANOS().setOptions({ transform: 'all' });
+    const a = [1, 2], m = new Map([['a', 1]]), o = { a: 1 }, s = new Set([1]);
+    n.unshift([a], [m], [o], [s]);
     assert(n.at(0) instanceof NANOS);
     assert(n.at(1) instanceof NANOS);
     assert(n.at(2) instanceof NANOS);

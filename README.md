@@ -349,6 +349,8 @@ Prepends one or more elements to the beginning of the instance.
 * See `.push` for the interpretation of `items`.
 * Existing indexed items are renumbered to accomodate new indexed items as needed.
 * Example: `.unshift(['a', /*gap*/, 'b']);` increases current indexes by *3*; `.at(0)` will be `a` and `.at(2)` will be `b`.
+* Unlike `push`, which processes left-to-right, `unshift` processes right-to-left:\
+`push({k:'a'},{k:'b'}).unshift({k:'c'},{k:'d'}) // k: a->b->d->c (final)`
 
 ### `.values()`
 Returns an iterator that yields the (sparse) *indexed* values in order.
