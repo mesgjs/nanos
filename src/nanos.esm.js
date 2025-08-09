@@ -110,7 +110,7 @@ export class NANOS {
      */
     deepFreeze () {
 	this.freeze();
-	for (const [key, value] of this.entries()) {
+	for (const [_key, value] of this.entries()) {
 	    if (value instanceof NANOS) {
 		value.deepFreeze();
 	    }
@@ -556,9 +556,9 @@ export class NANOS {
 	if (this._locked) throw new TypeError('NANOS: Cannot push after locking');
 	const batch = this._rio?.batch || ((cb) => cb());
 	const options = this._options, transform = options.transform;
-	const pushEntries = (entries) => {
-	    const base = this._next;
-	    for (const [key, value] of entries) {
+	const pushEntries = (entries, next = 0) => {
+	    const base = this._next, minNext = base + next;
+	    for (let [key, value] of entries) {
 		if (isIndex(key)) {
 		    // Positional: preserve sparseness, potentially transforming
 		    // map-ish and set-ish values into nested NANOS
@@ -567,6 +567,7 @@ export class NANOS {
 		    this.set(newKey, value);
 		} else this.set(key, value);
 	    }
+	    if (this._next < minNext) this._next = minNext;
 	};
 	const mergeMaps = (entries) => {
 	    for (let [key, value] of entries) {
@@ -586,7 +587,9 @@ export class NANOS {
 	const pushInner = (transform === 'sets') ? mergeMaps : pushEntries;
 	const pushOuter = (outer) => {
 	    if (isPlainObject(outer)) pushInner(Object.entries(outer));
-	    else if (this.#useEntries(outer)) pushInner(outer.entries());
+	    else if (Array.isArray(outer)) pushInner(Object.entries(outer), outer.length);
+	    else if (outer instanceof NANOS) pushInner(outer.entries(), outer.next);
+	    else if (!options.opaqueMaps && outer instanceof Map) pushInner(outer.entries());
 	    else if (!options.opaqueSets && outer instanceof Set) pushInner([...outer.values()].entries());
 	    else this.set(undefined, outer);
 	};
@@ -919,31 +922,21 @@ export class NANOS {
 	if (this._locked) throw new TypeError('NANOS: Cannot unshift after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot unshift after index lock');
 	const batch = this._rio?.batch || ((cb) => cb());
-	// Unshift is essentially ".push(new).push(existing)", except performed in-place
-	const aggregate = this.similar(...values);
-	batch(() => {
-	    this.#renumber(0, this._next, aggregate.next);
-	    this.fromEntries(aggregate.entries());
-	});
+	batch(() => values.toReversed().forEach((outer) => {
+	    if (!(outer instanceof NANOS)) outer = new this.constructor(outer);
+	    this.#renumber(0, this._next, outer.next);
+	    this.fromEntries(outer.entries(), true);
+	}));
 	return this;
     }
 
     /**
-     * Can value.entries() be used for iteration?
-     * @param {*} value
-     * @returns {boolean}
-     */
-    #useEntries (value) {
-	return (Array.isArray(value) || (value instanceof NANOS) || (!this._options.opaqueMaps && value instanceof Map));
-    }
-
-    /**
-     * Return a (non-sparse) iterator of *indexed* values [0.._next-1].
+     * Return a (sparse) iterator of *indexed* values.
      * @yields {*}
      */
     *values () {
 	this._rio?.depend();
-	for (let i = 0; i < this._next; ++i) yield this.at(i);
+	for (const index of this.indexKeys()) yield this.at(index);
     }
 
     /**

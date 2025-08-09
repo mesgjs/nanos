@@ -137,13 +137,13 @@ values.
 ```
 [(html
     [head
-        [title 'HTML As SLID']
+	[title 'HTML As SLID']
     ]
     [body
-        /* [tag properties... children...] */
-        [h1 'This is so SLID!']
-        [p style='font-family: sans-serif;' 'Hello, world']
-        [a href='https://example.com' target=_blank example.com]
+	/* [tag properties... children...] */
+	[h1 'This is so SLID!']
+	[p style='font-family: sans-serif;' 'Hello, world']
+	[a href='https://example.com' target=_blank example.com]
     ]
 )]
 ```

@@ -351,7 +351,7 @@ Prepends one or more elements to the beginning of the instance.
 * Example: `.unshift(['a', /*gap*/, 'b']);` increases current indexes by *3*; `.at(0)` will be `a` and `.at(2)` will be `b`.
 
 ### `.values()`
-Returns an iterator that yields the *indexed* values in order.
+Returns an iterator that yields the (sparse) *indexed* values in order.
 
 ---
 

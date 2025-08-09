@@ -76,23 +76,16 @@ Deno.test("NANOS delete", () => {
     assertEquals(n.has("foo"), false);
 });
 
-// Missing: deepFreeze
-// Missing: filter
-// Missing: find
-// Missing: findLast
-// Missing: forEach
-// Missing: freeze
-// Missing: indexEntries
-// Missing: indexKeys
-// Missing: namedEntries
-// Missing: namedKeys
-// Missing: options
-// Missing: reverseEntries
-// Missing: similar
-// Missing: storage
-// Missing: toJSON
-// Missing: toReversed
-// Missing: toString
+Deno.test("NANOS deepFreeze", () => {
+    const inner = new NANOS("c");
+    const n = new NANOS("a", "b", [inner]);
+    n.deepFreeze();
+    assert(Object.isFrozen(n));
+    assert(Object.isFrozen(inner));
+    assertThrows(() => { n.set(0, "z"); }, TypeError);
+    assertThrows(() => { inner.set(0, "z"); }, TypeError);
+});
+
 
 Deno.test("NANOS entries", () => {
     const n = new NANOS("a", "b");
@@ -106,6 +99,51 @@ Deno.test("NANOS entries compact", () => {
     n.set("foo", "bar");
     const entries = [...n.entries(true)];
     assertEquals(entries, [[0, "a"], [1, "b"], ["foo", "bar"]]);
+});
+
+Deno.test("NANOS filter", () => {
+    const n = new NANOS(1, "a", 2, "b", 3);
+    n.set("foo", "bar");
+    const isNumber = (v) => typeof v === 'number';
+    const filtered = n.filter(isNumber);
+    assertEquals(filtered.size, 3);
+    assertEquals([...filtered.values()], [1, 2, 3]);
+    assertEquals([...filtered.keys()], ["0", "2", "4"]);
+});
+
+Deno.test("NANOS find", () => {
+    const n = new NANOS("a", "b", "c");
+    const found = n.find((v) => v === "b");
+    assertEquals(found, ["1", "b"]);
+    const notFound = n.find((v) => v === "d");
+    assertEquals(notFound, undefined);
+});
+
+Deno.test("NANOS findLast", () => {
+    const n = new NANOS("a", "b", "a");
+    const found = n.findLast((v) => v === "a");
+    assertEquals(found, ["2", "a"]);
+});
+
+Deno.test("NANOS forEach", () => {
+    const n = new NANOS("a", "b");
+    n.set("foo", "bar");
+    const result = [];
+    n.forEach((value, key) => {
+	result.push([key, value]);
+    });
+    assertEquals(result, [["0", "a"], ["1", "b"], ["foo", "bar"]]);
+});
+
+Deno.test("NANOS freeze", () => {
+    const inner = new NANOS("b");
+    const n = new NANOS("a", inner);
+    n.freeze();
+    assert(Object.isFrozen(n));
+    assertThrows(() => { n.set(0, "z"); }, TypeError);
+    assert(!Object.isFrozen(inner));
+    inner.set(0, "c");
+    assertEquals(inner.at(0), "c");
 });
 
 
@@ -173,8 +211,7 @@ Deno.test("NANOS fromPairs json", () => {
 });
 
 Deno.test("NANOS has", () => {
-    const n = new NANOS("a");
-    n.set("foo", "bar");
+    const n = new NANOS("a", {foo: 'bar'});
     assertEquals(n.has(0), true);
     assertEquals(n.has("0"), true);
     assertEquals(n.has(1), false);
@@ -187,6 +224,18 @@ Deno.test("NANOS includes", () => {
     assertEquals(n.includes("a"), true);
     assertEquals(n.includes("b"), true);
     assertEquals(n.includes("c"), false);
+});
+
+Deno.test("NANOS indexEntries", () => {
+    const n = new NANOS({foo: 'bar'}, "a", "b");
+    const entries = [...n.indexEntries()];
+    assertEquals(entries, [["0", "a"], ["1", "b"]]);
+});
+
+Deno.test("NANOS indexKeys", () => {
+    const n = new NANOS({foo: 'bar'}, "a", "b");
+    const keys = [...n.indexKeys()];
+    assertEquals(keys, ["0", "1"]);
 });
 
 Deno.test("NANOS keyOf", () => {
@@ -203,10 +252,21 @@ Deno.test("NANOS lastKeyOf", () => {
     assertEquals(n.lastKeyOf("c"), undefined);
 });
 
+Deno.test("NANOS namedEntries", () => {
+    const n = new NANOS("a", {foo: 'bar'}, "b", {baz: 'qux'});
+    const entries = [...n.namedEntries()];
+    assertEquals(entries, [["foo", "bar"], ["baz", "qux"]]);
+});
+
+Deno.test("NANOS namedKeys", () => {
+    const n = new NANOS("a", {foo: 'bar'}, "b", {baz: 'qux'});
+    const keys = [...n.namedKeys()];
+    assertEquals(keys, ["foo", "baz"]);
+});
+
 Deno.test("NANOS keys", () => {
-    const n = new NANOS("a", "b");
-    n.set("foo", "bar");
-    assertEquals([...n.keys()], ["0", "1", "foo"]);
+    const n = new NANOS("a", {foo: 'bar'}, "b");
+    assertEquals([...n.keys()], ["0", "foo", "1"]);
 });
 
 
@@ -222,11 +282,17 @@ Deno.test("NANOS next", () => {
     assertEquals(n.at(1), undefined);
 });
 
+Deno.test("NANOS options", () => {
+    const n = new NANOS();
+    assertEquals(n.options, {});
+    n.setOptions({ transform: true });
+    assertEquals(n.options, { transform: true });
+});
+
 Deno.test("NANOS pairs", () => {
-    const n = new NANOS("a");
-    n.set("foo", "bar");
-    assertEquals(n.pairs(), ["0", "a", "foo", "bar"]);
-    assertEquals(n.pairs(true), [0, "a", "foo", "bar"]);
+    const n = new NANOS(["a", , "b"], {foo: 'bar'});
+    assertEquals(n.pairs(), ["0", "a", "2", "b", "foo", "bar"]);
+    assertEquals(n.pairs(true), [0, "a", 2, "b", "foo", "bar"]);
 });
 
 Deno.test("NANOS pop", () => {
@@ -240,24 +306,6 @@ Deno.test("NANOS pop", () => {
     assertEquals(n.pop(), undefined);
 });
 
-Deno.test("NANOS push", () => {
-    const n = new NANOS("a");
-    n.push("b", "c");
-    assertEquals(n.size, 3);
-    assertEquals(n.at(0), "a");
-    assertEquals(n.at(1), "b");
-    assertEquals(n.at(2), "c");
-    assertEquals(n.next, 3);
-});
-
-Deno.test("NANOS push with object", () => {
-    const n = new NANOS();
-    n.push({ foo: "bar", "0": "a" });
-    assertEquals(n.size, 2);
-    assertEquals(n.at('foo'), 'bar');
-    assertEquals(n.at(0), 'a');
-});
-
 Deno.test("NANOS reverse", () => {
     const n = new NANOS("a", "b", "c");
     n.set("foo", "bar");
@@ -267,6 +315,12 @@ Deno.test("NANOS reverse", () => {
     assertEquals(n.at(1), "b");
     assertEquals(n.at(2), "a");
     assertEquals(n.at("foo"), "bar");
+});
+
+Deno.test("NANOS reverseEntries", () => {
+    const n = new NANOS("a", {foo: 'bar'}, "b");
+    const entries = [...n.reverseEntries()];
+    assertEquals(entries, [["1", "b"], ["foo", "bar"], ["0", "a"]]);
 });
 
 
@@ -295,6 +349,14 @@ Deno.test("NANOS shift", () => {
     assertEquals(n.shift(), undefined);
 });
 
+Deno.test("NANOS similar", () => {
+    const n = new NANOS();
+    n.setOptions({ transform: true });
+    const s = n.similar("a", "b");
+    assertEquals(s.options.transform, true);
+    assertEquals(s.size, 2);
+    assertEquals(s.at(1), "b");
+});
 
 Deno.test("NANOS size", () => {
     const n = new NANOS("a", "b");
@@ -303,24 +365,36 @@ Deno.test("NANOS size", () => {
     assertEquals(n.size, 3);
 });
 
-
-Deno.test("NANOS unshift", () => {
-    const n = new NANOS("c", "d");
-    n.unshift("a", "b");
-    assertEquals(n.size, 4);
-    assertEquals(n.at(0), "a");
-    assertEquals(n.at(1), "b");
-    assertEquals(n.at(2), "c");
-    assertEquals(n.at(3), "d");
-    assertEquals(n.next, 4);
+Deno.test("NANOS storage", () => {
+    const n = new NANOS("a", {foo: "bar"});
+    const storage = n.storage;
+    assertEquals(storage["0"], "a");
+    assertEquals(storage.foo, "bar");
 });
 
+Deno.test("NANOS toJSON", () => {
+    const n = new NANOS(["a", , "b"], {foo: "bar"});
+    assertEquals(n.toJSON(), {
+	type: "@NANOS@",
+	next: 3,
+	pairs: [0, "a", 2, "b", "foo", "bar"],
+    });
+});
+
+Deno.test("NANOS toReversed", () => {
+    const n = new NANOS(["a", , "b"], {key: 'value'}, "c");
+    const reversed = n.toReversed();
+    assertEquals([...reversed.entries(true)], [[0, "c"], ['key', 'value'], [1, "b"], [3, "a"]]);
+});
+
+Deno.test("NANOS toString", () => {
+    const n = new NANOS("a", "b");
+    assertEquals(n.toString(), "[(a b)]");
+});
 
 Deno.test("NANOS values", () => {
-    const n = new NANOS("a", "b");
-    n.set(3, "d");
-    n.set("foo", "bar");
-    assertEquals([...n.values()], ["a", "b", undefined, "d"]);
+    const n = new NANOS(["a", "b", , 'd'], {foo: 'bar'});
+    assertEquals([...n.values()], ["a", "b", "d"]);
 });
 
 Deno.test("parseSLID basic", () => {
