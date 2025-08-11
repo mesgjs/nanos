@@ -4,6 +4,6 @@
     },
   "imports": {
     "escape-js/escape.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/escape-js@0.0.2/src/escape.esm.js",
-    "reactive/reactive.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/reactive@0.0.3/src/reactive.esm.js"
+    "reactive/reactive.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/reactive@0.1.3/src/reactive.esm.js"
   }
 }

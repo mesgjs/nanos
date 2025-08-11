@@ -70,23 +70,48 @@ export class NANOS {
     }
 
     /**
-     * Get value at key or index (negative index relative to end).
-     * @param {string|number|Array.<(string|number)>} key
-     * @param {*} [defVal]
+     * Get value at key or index. If the value is reactive, the "final"
+     * (non-reactive) value is returned. See also `atRaw()`.
+     * @param {string|number|Array<(string|number)>} key Path to value
+     * @param {object} [opts] Options object
+     * @param {*} [opts.default] Default value to return if key is absent
+     * @param {boolean} [opts.raw=false] Return the raw value instead
      * @returns {*}
      */
-    at (key, defVal) {
+    at (key, opts = {}) {
+	opts = this.#getOpts(opts, 'default');
 	if (Array.isArray(key)) {
+	    // deno-lint-ignore no-this-alias
 	    let next = this;
 	    for (const curKey of key) {
-		if (!(next instanceof NANOS) || !next.has(curKey)) return defVal;
-		next = next.at(curKey);
+		next = this.#final(next);
+		if (!(next instanceof NANOS) || !next.has(curKey)) return opts.default;
+		next = next.atRaw(curKey);
 	    }
+	    if (!opts.raw && this._rio?.get) next = this.#final(next);
 	    return next;
 	}
 	this._rio?.depend();
 	key = this.#wrapKey(key);
-	return Object.hasOwn(this._storage, key) ? this._storage[key] : defVal;
+	if (Object.hasOwn(this._storage, key)) {
+	    let ret = this._storage[key];
+	    if (!opts.raw && this._rio?.get) ret = this.#final(ret);
+	    return ret;
+	}
+	return opts.default;
+    }
+
+    /**
+     * Get the "raw" value at a key or index (negative index relative to end).
+     * This may be a reactive value. See also `at()`.
+     * @param {string|number|Array<(string|number)>} key
+     * @param {object} [opts] Options object
+     * @param {*} [opts.default] Default value to return if key is absent
+     * @returns
+     */
+    atRaw (key, opts = {}) {
+	opts = this.#getOpts(opts, 'default', { raw: true });
+	return this.at(key, opts);
     }
 
     /**
@@ -122,9 +147,11 @@ export class NANOS {
      * Deletes a key-value pair.
      * NOTE: unlike the delete statement, this returns the deleted value!
      * @param {string|number} key
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.raw=false] Return the raw, rather than final, deleted value
      * @returns {*}
      */
-    delete (key) {
+    delete (key, opts = {}) {
 	if (this._locked) throw new TypeError('NANOS: Cannot delete after locking');
 	const skey = String(key);
 	const ret = this._storage[skey];
@@ -133,7 +160,7 @@ export class NANOS {
 	    this._keys = this._keys.filter((k) => k !== skey);
 	    this._rio?.changed();
 	}
-	return ret;
+	return (opts.raw ? ret : this.#final(ret));
     }
 
     /** Signals a dependency for reactive interfaces. */
@@ -143,56 +170,86 @@ export class NANOS {
      * Returns an iterator of [key, value] pairs.
      * Compact mode uses numeric index keys instead of the standard strings
      * (e.g. 0 instead of '0').
-     * @param {boolean} [compact=false]
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.compact=false] Return numeric index keys instead of strings
+     * @param {boolean} [opts.raw=false] Return raw, rather than final, reactive values
      * @yields {[string|number, *]}
      */
-    *entries (compact = false) {
+    *entries (opts = {}) {
+	opts = this.#getOpts(opts, 'compact');
 	this._rio?.depend();
-	const ik = compact ? ((k) => isIndex(k) ? parseInt(k, 10) : k) : ((k) => k);
-	for (const k of this._keys) yield [ ik(k), this._storage[k] ];
+	const storage = this._storage;
+	const ik = opts.compact ? ((k) => isIndex(k) ? parseInt(k, 10) : k) : ((k) => k);
+	const fv = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+	for (const k of this._keys) yield [ ik(k), fv(storage[k]) ];
     }
 
     /**
      * Returns a shallow copy of elements for which f(value, key) is true.
-     * @param {function(*, string|number, NANOS): boolean} f
+     * @param {function(*, string|number, NANOS): boolean} f The filter function
+     * @param {object} [opts] Options object, passed to entries()
      * @returns {NANOS}
      */
-    filter (f) {
+    filter (f, opts = {}) {
 	this._rio?.depend();
-	const result = new this.constructor();
-	result.fromEntries([...this.entries()].filter((kv) => f(kv[1], kv[0], this)));
+	const result = this.similar();
+	result.fromEntries([...this.entries(opts)].filter((kv) => f(kv[1], kv[0], this)));
 	return result;
+    }
+
+    #final (value) {
+	while (this._rio?.isReactive?.(value)) value = this._rio.get(value);
+	return value;
     }
 
     /**
      * Returns first [key, value] where f(value, key) is true; cf find, findIndex.
      * @param {function(*, string|number, NANOS): boolean} f
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.raw=false] Pass the filter raw, rather than final, reactive values
      * @returns {[string|number, *]|undefined}
      */
-    find (f) {
+    find (f, opts = {}) {
 	this._rio?.depend();
 	const s = this._storage;
-	for (const k of this._keys) if (f(s[k], k, this)) return [k, s[k]];
+	const toFinal = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+	for (const k of this._keys) {
+	    const final = toFinal(s[k]);
+	    if (f(final, k, this)) return [k, final];
+	}
     }
 
     /**
      * Returns last [key, value] where f(value, key) is true; cf findLast, findLastIndex.
      * @param {function(*, string|number, NANOS): boolean} f
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.raw=false] Pass the filter raw, rather than final, reactive values
      * @returns {[string|number, *]|undefined}
      */
-    findLast (f) {
+    findLast (f, opts = {}) {
 	this._rio?.depend();
 	const s = this._storage;
-	for (const k of this._keys.toReversed()) if (f(s[k], k, this)) return [k, s[k]];
+	const toFinal = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+	for (const k of this._keys.toReversed()) {
+	    const final = toFinal(s[k]);
+	    if (f(final, k, this)) return [k, final];
+	}
     }
 
     /**
      * Executes a function for each element.
      * @param {function(*, string|number, NANOS): void} f
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.raw=false] Pass the filter raw, rather than final, reactive values
      */
-    forEach (f) {
+    forEach (f, opts = {}) {
 	this._rio?.depend();
-	for (const k of this._keys) f(this._storage[k], k, this);
+	const storage = this._storage;
+	const toFinal = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+	for (const k of this._keys) {
+	    const final = toFinal(storage[k]);
+	    f(final, k, this);
+	}
     }
 
     /**
@@ -212,9 +269,9 @@ export class NANOS {
     }
 
     /**
-     * Populates from an array of entries.
+     * Populates the NANOS from an array of [key, value] entries.
      * @param {Array<[string|number, *]>} entries
-     * @param {boolean} [insert=false]
+     * @param {boolean} [insert=false] Use insert mode instead of append mode
      * @returns {this}
      */
     fromEntries (entries, insert = false) {
@@ -260,6 +317,18 @@ export class NANOS {
     }
 
     /**
+     * Return a normalized options object when the value might historically have been a single scalar option.
+     * @param {object|boolean} optParam 
+     * @param {string} defKey 
+     * @param {object} defOpts 
+     * @returns 
+     */
+    #getOpts (optParam, defKey, defOpts = {}) {
+	const optObj = isPlainObject(optParam) ? optParam : { [defKey]: optParam };
+	return { ...defOpts, ...optObj };
+    }
+
+    /**
      * Checks for the existence of a key.
      * Instead of "key in NANOS".
      * @param {string|number} key
@@ -273,19 +342,23 @@ export class NANOS {
     /**
      * Checks if a value exists.
      * @param {*} value
+     * @param {object} [opts] Options object, passed to keyOf/find
      * @returns {boolean}
      */
-    includes (value) {
-	return this.keyOf(value) !== undefined;
+    includes (value, opts = {}) {
+	return this.keyOf(value, opts) !== undefined;
     }
 
     /**
      * Iterates over indexed entries.
-     * @param {boolean} [compact=false]
+     * @param {object} [opts] Options object, passed to entries
+     * @param {boolean} [opts.compact=false] Return number indexes rather than strings
+     * @param {boolean} [opts.raw=false] Return raw, rather than final, reactive values
      * @yields {[string|number, *]}
      */
-    *indexEntries (compact = false) {
-	for (const e of this.entries(compact)) if (isIndex(e[0])) yield e;
+    *indexEntries (opts) {
+	opts = this.#getOpts(opts, 'compact');
+	for (const kv of this.entries(opts)) if (isIndex(kv[0])) yield kv;
     }
 
     /**
@@ -326,9 +399,10 @@ export class NANOS {
     /**
      * Returns first key/index with matching value, or undefined; cf indexOf.
      * @param {*} value
+     * @param {object} [opts] Options object, passed to find
      * @returns {string|number|undefined}
      */
-    keyOf (value) { return this.find((v) => v === value)?.[0]; }
+    keyOf (value, opts = {}) { return this.find((v) => v === value, opts)?.[0]; }
 
     /**
      * Returns an iterator for the keys.
@@ -342,10 +416,11 @@ export class NANOS {
     /**
      * Returns last key/index with matching value, or undefined; cf lastIndexOf.
      * @param {*} value
+     * @param {object} [opts] Options object, passed to findLast
      * @returns {string|number|undefined}
      */
-    lastKeyOf (value) {
-	return this.findLast((v) => v === value)?.[0];
+    lastKeyOf (value, opts = {}) {
+	return this.findLast((v) => v === value, opts)?.[0];
     }
 
     /**
@@ -369,7 +444,7 @@ export class NANOS {
 
     /**
      * Lock all current (and possibly new) *values* (doesn't affect keys).
-     * @param {boolean} [andNew=false]
+     * @param {boolean} [andNew=false] Also lock new keys' values as they are added
      * @returns {this}
      */
     lockAll (andNew = false) {
@@ -399,18 +474,20 @@ export class NANOS {
 
     /**
      * Iterates over named entries.
+     * @param {object} [opts] Options block, passed to entries
      * @yields {[string, *]}
      */
-    *namedEntries () {
-	for (const e of this.entries()) if (!isIndex(e[0])) yield e;
+    *namedEntries (opts = {}) {
+	for (const kv of this.entries(opts)) if (!isIndex(kv[0])) yield kv;
     }
 
     /**
      * Iterates over named keys.
+     * @param {object} [opts] Options block, passed to entries
      * @yields {string}
      */
-    *namedKeys () {
-	for (const e of this.entries()) if (!isIndex(e[0])) yield e[0];
+    *namedKeys (opts = {}) {
+	for (const kv of this.entries({ ...opts, raw: true })) if (!isIndex(kv[0])) yield kv[0];
     }
 
     /**
@@ -448,8 +525,9 @@ export class NANOS {
      * @param {boolean} [compact=false]
      * @returns {Array<*>}
      */
-    pairs (compact = false) {
-	return [...this.entries(compact)].flat(1);
+    pairs (opts = {}) {
+	opts = this.#getOpts(opts, 'compact');
+	return [...this.entries(opts)].flat(1);
     }
 
     /**
@@ -534,13 +612,15 @@ export class NANOS {
 
     /**
      * Like Array.pop (only applies to indexed values).
+     * @param {object} [opts] Options block, passed to delete
+     * @param {boolean} [opts.raw=false] Return the raw, rather than final, popped value
      * @returns {*}
      */
-    pop () {
+    pop (opts = {}) {
 	if (this._locked) throw new TypeError('NANOS: Cannot pop after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot pop after index lock');
 	if (!this._next) return undefined;
-	return this.delete(--this._next);
+	return this.delete(--this._next, opts);
     }
 
     /**
@@ -573,7 +653,7 @@ export class NANOS {
 	    for (let [key, value] of entries) {
 		if (isIndex(key)) {
 		    // Positional maps get merged; positional sets become nested NANOS
-		    if (this.#mapish(value)) mergeMaps((new this.constructor(value)).entries());
+		    if (this.#mapish(value)) mergeMaps((this.similar(value)).entries());
 		    else {
 			if (this.#setish(value)) value = this.similar(value);
 			this.set(undefined, value);
@@ -668,10 +748,13 @@ export class NANOS {
      * @param {boolean} [compact=false]
      * @yields {[string|number, *]}
      */
-    *reverseEntries (compact = false) {
+    *reverseEntries (opts = {}) {
+	opts = this.#getOpts(opts, 'compact');
 	this._rio?.depend();
-	const ik = compact ? ((k) => isIndex(k) ? parseInt(k, 10) : k) : ((k) => k);
-	for (const k of this._keys.toReversed()) yield [ ik(k), this._storage[k] ];
+	const storage = this._storage;
+	const ik = opts.compact ? ((k) => isIndex(k) ? parseInt(k, 10) : k) : ((k) => k);
+	const toFinal = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+	for (const k of this._keys.toReversed()) yield [ ik(k), toFinal(storage[k]) ];
     }
 
     /**
@@ -695,10 +778,13 @@ export class NANOS {
      * possible position that maintain increasing-index ordering constraints.
      * @param {string|number} [key]
      * @param {*} value
-     * @param {boolean} [insert=false]
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.insert=false] Add to beginning instead of end
+     * @param {boolean} [opts.raw=false] Do not auto-wrap value in a reactive
      * @returns {*}
      */
-    set (key, value, insert = false) {
+    set (key, value, opts = {}) {
+	opts = this.#getOpts(opts, 'insert');
 	if (this._locked) throw new TypeError('NANOS: Cannot set after locking');
 	if (key === undefined) key = this._next;
 	key = this.#wrapKey(key);
@@ -710,7 +796,7 @@ export class NANOS {
 	if (!Object.hasOwn(this._storage, skey)) {
 	    // The key or index is new; add it in the proper place
 	    changed = true;
-	    if (insert) {
+	    if (opts.insert) {
 		if (ind === false || !this._next) this._keys.unshift(skey);
 		else {
 		    // Earliest placement maintaining ascending index order
@@ -730,6 +816,8 @@ export class NANOS {
 	    if (ind !== false && ind >= this._next) this._next = ind + 1;
 	}
 
+	if (!opts.raw && this._rio?.onSet) value = this._rio.onSet(this, key, value);
+
 	if (this._options.transform && (this.#setish(value) || this.#mapish(value))) {
 	    // Convert transparent containers to NANOS
 	    this._storage[skey] = this.similar(value);
@@ -739,6 +827,18 @@ export class NANOS {
 	if (this._lockNew) this.lock(skey);
 	if (changed) this._rio?.changed();
 	return value;
+    }
+    /**
+     * Set a raw value, bypassing any RIO `onSet` handler.
+     * @param {string|number} [key]
+     * @param {*} value
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.insert=false] Add to beginning instead of end
+     * @returns
+     */
+    setRaw (key, value, opts = {}) {
+	opts = this.#getOpts(opts, 'insert', { raw: true });
+	return this.set(key, value, opts);
     }
 
     /**
@@ -777,15 +877,17 @@ export class NANOS {
 
     /**
      * Like Array.shift (only applies to indexed values).
+     * @param {object} [opts] Options block, passed to delete
+     * @param {boolean} [opts.raw=false] Return the raw, rather than final, shifted value
      * @returns {*}
      */
-    shift () {
+    shift (opts = {}) {
 	if (this._locked) throw new TypeError('NANOS: Cannot shift after locking');
 	if (this._lockInd) throw new TypeError('NANOS: Cannot shift after index lock');
 	if (!this._next) return undefined;
 	const batch = this._rio?.batch || ((cb) => cb());
 	return batch(() => {
-	    const res = this.delete(0);
+	    const res = this.delete(0, opts);
 	    this.#renumber(1, this._next, -1);
 	    return res;
 	});
@@ -815,6 +917,7 @@ export class NANOS {
 
     /**
      * Gets the underlying storage object.
+     * Reactive values will always be raw.
      * @returns {object}
      */
     get storage () {
@@ -932,11 +1035,14 @@ export class NANOS {
 
     /**
      * Return a (sparse) iterator of *indexed* values.
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.raw] Yields raw, rather than final, reactive values
      * @yields {*}
      */
-    *values () {
+    *values (opts = {}) {
 	this._rio?.depend();
-	for (const index of this.indexKeys()) yield this.at(index);
+	const toFinal = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+	for (const index of this.indexKeys()) yield toFinal(this.atRaw(index));
     }
 
     /**

@@ -14,7 +14,7 @@ It is designed as a single ES module with no external dependencies.
 *   **Custom Serialization:**
     *   **SLID (Static List Data):** A custom, human-readable data format for serialization and deserialization.
     *   **QJSON (Quasi-JSON):** A relaxed JSON-like parser for easier data entry.
-*   **Reactive Interface:** Can integrate with reactive libraries through a `rio` (Reactive Interface Object) property to automatically track changes.
+*   **Reactive Interface:** Can integrate with reactive libraries through a `rio` (Reactive Interface Object) property to automatically track changes. The RIO can be a "basic" RIO that only tracks packaging changes (key addition/removal), or an "extended" RIO that also tracks value changes and can automatically wrap new values in reactives.
 *   **Value Redaction:** Provides a `redact()` method to securely exclude sensitive values from string output.
 
 ## Installation
@@ -104,12 +104,19 @@ console.log(parsed.at('status')); // Output: 'ok'
 Creates a new NANOS instance.
 *   **`...items`**: Initial items to `.push` into the instance.
 
-### `.at(key, [defVal])`
-Gets the value at a specified key or index. Negative indices are resolved relative to the end of the indexed portion.
+### `.at(key, [opts])`
+Gets the value at a specified key or index. Negative indices are resolved relative to the end of the indexed portion. If the value is reactive, the "final" (non-reactive) value is returned by default.
 *   **`key`**: The key or index to look up, or an array of keys/indexes to recursively traverse.
-*   **`defVal`**: An optional default value to return if the key is not found.
-*   **Returns**: The value, or `defVal` if not found.
+*   **`opts.default`**: An optional default value to return if the key is not found.
+*   **`opts.raw`**: If `true`, returns the raw value, which may be a reactive.
+*   **Returns**: The value, or `opts.default` if not found.
 *   Alias: `.get()`
+
+### `.atRaw(key, [opts])`
+Gets the raw value at a specified key or index. This is a shortcut for `.at(key, { raw: true })`.
+*   **`key`**: The key or index to look up.
+*   **`opts.default`**: An optional default value to return if the key is not found.
+*   **Returns**: The raw value, or `opts.default` if not found.
 
 ### `.clear()`
 Removes all key-value pairs from the instance. Throws an error if the instance is locked.
@@ -119,17 +126,19 @@ Removes all key-value pairs from the instance. Throws an error if the instance i
 Recursively freezes this NANOS instance and any nested NANOS values, making them completely immutable.
 *   **Returns**: `this`.
 
-### `.delete(key)`
+### `.delete(key, [opts])`
 Deletes a key-value pair by its key or index.
 *   **`key`**: The key or index to delete.
+*   **`opts.raw`**: If `true`, returns the raw (potentially reactive) value.
 *   **Returns**: The value that was deleted.
 
 ### `.depend()`
 Signals a dependency for reactive interfaces (like Svelte or Vue).
 
-### `.entries([compact=false])`
+### `.entries([opts])`
 Returns an iterator that yields `[key, value]` pairs.
-*   **`compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **`opts.compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **`opts.raw`**: If `true`, yields raw (potentially reactive) values.
 *   **Returns**: An iterator for all entries.
 
 ### `.filter(f)`
@@ -137,19 +146,22 @@ Creates a new NANOS instance with all elements that pass the test implemented by
 *   **`f(value, key, nanos)`**: The testing function.
 *   **Returns**: A new, filtered NANOS instance.
 
-### `.find(f)`
+### `.find(f, [opts])`
 Returns the first `[key, value]` pair for which the testing function `f` returns true.
 *   **`f(value, key, nanos)`**: The testing function.
+*   **`opts.raw`**: If `true`, passes raw (potentially reactive) values to the testing function.
 *   **Returns**: The `[key, value]` pair, or `undefined`.
 
-### `.findLast(f)`
+### `.findLast(f, [opts])`
 Returns the last `[key, value]` pair for which the testing function `f` returns true.
 *   **`f(value, key, nanos)`**: The testing function.
+*   **`opts.raw`**: If `true`, passes raw (potentially reactive) values to the testing function.
 *   **Returns**: The `[key, value]` pair, or `undefined`.
 
-### `.forEach(f)`
+### `.forEach(f, [opts])`
 Executes a provided function once for each key/value pair.
 *   **`f(value, key, nanos)`**: The function to execute.
+*   **`opts.raw`**: If `true`, passes raw (potentially reactive) values to the function.
 
 ### `.freeze()`
 Freezes the instance, making the key set and all values immutable.
@@ -253,8 +265,9 @@ Parses a SLID (Static List Data) formatted string into a NANOS instance or tree 
 *   **Returns**: A new NANOS instance.
 * See the included SLID documentation for details.
 
-### `.pop()`
+### `.pop([opts])`
 Removes and returns the last indexed value.
+*   **`opts.raw`**: If `true`, returns the raw (potentially reactive) value.
 *   **Returns**: The removed value, or `undefined` if empty.
 
 ### `.push(...items)`
@@ -283,19 +296,28 @@ Returns an iterator that yields `[key, value]` pairs in reverse (last-to-first) 
 ### `.rio` (getter/setter)
 Gets or sets the reactive-interface object for integration with UI frameworks.
 
-### `.set(key, value, [insert=false])`
+### `.set(key, value, [opts])`
 Sets a key-value pair. If `key` is `undefined`, the next sequential index is used.
 *   **`key`**: The key or index.
 *   **`value`**: The value to set.
-*   **`insert`**: If `true`, the new key is inserted instead of appended.
+*   **`opts.insert`**: If `true`, the new key is inserted instead of appended.
+*   **`opts.raw`**: If `true`, sets the value directly without invoking the RIO's `onSet` handler.
 *   **Returns**: The `value` that was set.
 * In append mode (the default), new named values are added at the end, and indexed values are added at the last position that preserves ascending index order.
 * In insert mode, new named values are inserted at the beginning, and indexed values are added at the first position that preserves ascending index order.
 * Example: If the current keys are `['a', '1', 'b', '3', 'c']`, named values (with names other than `a`, `b`, or `c`) will be *inserted* before `a` or *appended* after `c`; a value with index 2 would be *inserted* before `b` (2 may not appear before 1, so this is the *first* eligible position in this key-set) or *appended* after `b` (2 may not appear after 3, so this is the *last* eligible position in this key-set).
 
+### `.setRaw(key, value, [opts])`
+Sets a raw value, bypassing any RIO `onSet` handler. This is a shortcut for `.set(key, value, { raw: true })`.
+*   **`key`**: The key or index.
+*   **`value`**: The value to set.
+*   **`opts.insert`**: If `true`, the new key is inserted instead of appended.
+*   **Returns**: The `value` that was set.
+
 ### `.setOptions(options)`
 Sets (merges) options for the NANOS instance.
 *   **`options`**: An object containing options to set.
+    *   `autoReactive`: If `true`, automatically wraps new values in reactives when using an extended RIO.
     *   `opaqueMaps`: If `true`, `Map` objects are treated as opaque values and not introspected.
     *   `opaqueSets`: If `true`, `Set` objects are treated as opaque values and not introspected.
     *   `transform`: A string that controls how object-like values are handled when being set or pushed. See the [Object-Value Transformations](#object-value-transformations) section for details.
@@ -306,8 +328,9 @@ Fluent interface for setting the reactive-interface object (RIO).
 *   **`r`**: The RIO object.
 *   **Returns**: `this`.
 
-### `.shift()`
+### `.shift([opts])`
 Removes and returns the first indexed value.
+*   **`opts.raw`**: If `true`, returns the raw (potentially reactive) value.
 *   **Returns**: The removed value, or `undefined` if empty.
 
 ### `.size` (getter)
@@ -352,8 +375,9 @@ Prepends one or more elements to the beginning of the instance.
 * Unlike `push`, which processes left-to-right, `unshift` processes right-to-left:\
 `push({k:'a'},{k:'b'}).unshift({k:'c'},{k:'d'}) // k: a->b->d->c (final)`
 
-### `.values()`
+### `.values([opts])`
 Returns an iterator that yields the (sparse) *indexed* values in order.
+*   **`opts.raw`**: If `true`, yields raw (potentially reactive) values.
 
 ---
 
@@ -405,9 +429,12 @@ NANOS: A new NANOS object with equivalent content is used in place of the origin
 
 ---
 
-## RIO API
+## Basic and Extended RIO API
 
-A RIO (reactive interface object) is an interface abstraction object that allows NANOS to potentially work with a variety of different reactive-value implementations. It must provide four functions as properties:
+A RIO (reactive interface object) is an interface abstraction object that allows NANOS to potentially work with a variety of different reactive-value implementations.
+
+### Basic RIO
+A basic RIO only handles "packaging" changes and must provide four functions as properties:
 
 ### `.batch(callback)`
 Executes the `callback` function in a reactive batch, deferring dependency recalculations as much as possible during the batch.
@@ -423,6 +450,24 @@ Called to create a new RIO object instance for additional, automatically-generat
 
 ### `.depend()`
 Called to record a reactive tracking dependency (in other words, any pending reactive computation or effect should be notified when `.changed` is called).
+
+### Extended RIO
+An extended RIO adds support for value-level reactivity. In addition to the four basic RIO methods, it must also provide the following:
+
+### `.get(reactiveValue)`
+Returns the non-reactive value from a reactive one.
+*  **`reactiveValue`**: The reactive value to get the final value of.
+
+### `.isReactive(value)`
+Returns `true` if a value is reactive.
+*  **`value`**: The value to check.
+
+### `.onSet(nanos, key, value)`
+Called whenever a value is being set in a NANOS instance. This function should return the raw value to be stored. Typical return values include the unwrapped `value` if it shouldn't be reactive (i.e. for new keys when `nanos.options.autoReactive` is not set), a new reactive wrapper around `value` for new keys, or the existing reactive wrapper updated with `value` for existing keys.
+*  **`nanos`**: The NANOS instance being modified.
+*  **`key`**: The key being set.
+*  **`value`**: The value being set.
+*  **Returns**: The value to be stored.
 
 ---
 
