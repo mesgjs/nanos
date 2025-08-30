@@ -314,7 +314,7 @@ Sets a raw value, bypassing any RIO `onSet` handler. This is a shortcut for `.se
 *   **`opts.insert`**: If `true`, the new key is inserted instead of appended.
 *   **Returns**: The `value` that was set.
 
-### `.setOptions(options)`
+### `.setOpts(options)`
 Sets (merges) options for the NANOS instance.
 *   **`options`**: An object containing options to set.
     *   `autoReactive`: If `true`, automatically wraps new values in reactives when using an extended RIO.
@@ -322,6 +322,7 @@ Sets (merges) options for the NANOS instance.
     *   `opaqueSets`: If `true`, `Set` objects are treated as opaque values and not introspected.
     *   `transform`: A string that controls how object-like values are handled when being set or pushed. See the [Object-Value Transformations](#object-value-transformations) section for details.
 *   **Returns**: `this`.
+*   Alias: `.setOptions()`
 
 ### `.setRIO(r)`
 Fluent interface for setting the reactive-interface object (RIO).
