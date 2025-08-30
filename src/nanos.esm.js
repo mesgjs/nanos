@@ -119,7 +119,7 @@ export class NANOS {
      * @returns {this}
      */
     clear () {
-	if (this._locked) throw new TypeError('NANOS: Cannot clear after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot "clear" after locking');
 	this._next = 0;
 	this._keys = [];
 	this._storage = {};
@@ -152,7 +152,7 @@ export class NANOS {
      * @returns {*}
      */
     delete (key, opts = {}) {
-	if (this._locked) throw new TypeError('NANOS: Cannot delete after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot "delete" after locking');
 	const skey = String(key);
 	const ret = this._storage[skey];
 	if (Object.hasOwn(this._storage, skey)) {
@@ -269,14 +269,37 @@ export class NANOS {
     }
 
     /**
+     * Populates the NANOS from another NANOS
+     * @param {object} [opts] Options object
+     * @param {boolean} [opts.deep] Deep-copy instead of shallow
+     * @param {boolean} [opts.raw] Transfer raw values
+     */
+    from (source, opts = {}) {
+	if (this._locked) throw new TypeError('NANOS: Cannot "from" after locking');
+	if (!(source instanceof NANOS)) return this;
+	const batch = this._rio?.batch || ((cb) => cb());
+	batch(() => {
+	    for (const kv of source.entries({ raw: opts.raw })) {
+		let [key, value] = kv;
+		if (opts.deep && value instanceof NANOS) {
+		    value = this.similar().from(value, opts);
+		}
+		this.set(key, value, { raw: true });
+	    }
+	    this.next = source.next;
+	});
+	return this;
+    }
+
+    /**
      * Populates the NANOS from an array of [key, value] entries.
      * @param {Array<[string|number, *]>} entries
      * @param {boolean} [insert=false] Use insert mode instead of append mode
      * @returns {this}
      */
     fromEntries (entries, insert = false) {
-	if (this._locked) throw new TypeError('NANOS: Cannot fromEntries after locking');
-	if (insert && this._lockInd) throw new TypeError('NANOS: Cannot insert fromEntries after index lock');
+	if (this._locked) throw new TypeError('NANOS: Cannot "fromEntries" after locking');
+	if (insert && this._lockInd) throw new TypeError('NANOS: Cannot insert "fromEntries" after index lock');
 	const batch = this._rio?.batch || ((cb) => cb());
 	batch(() => {
 	    if (insert) for (const e of [...entries].reverse()) this.set(e[0], e[1], true);
@@ -294,7 +317,7 @@ export class NANOS {
      * @returns {this}
      */
     fromPairs (...pairs) {
-	if (this._locked) throw new TypeError('NANOS: Cannot fromPairs after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot "fromPairs" after locking');
 	const batch = this._rio?.batch || ((cb) => cb());
 	if (isPlainObject(pairs[0]) && pairs[0].type === '@NANOS@') {
 	    batch(() => {
@@ -503,7 +526,7 @@ export class NANOS {
      * @param {number} nn
      */
     set next (nn) {
-	if (this._locked) throw new TypeError('NANOS: Cannot set next after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot set "next" after locking');
 	if (!Number.isInteger(nn) || nn < 0) return;
 	for (let i = this._next; --i >= nn; this.delete(i));
 	if (this._next !== nn) {
@@ -617,8 +640,8 @@ export class NANOS {
      * @returns {*}
      */
     pop (opts = {}) {
-	if (this._locked) throw new TypeError('NANOS: Cannot pop after locking');
-	if (this._lockInd) throw new TypeError('NANOS: Cannot pop after index lock');
+	if (this._locked) throw new TypeError('NANOS: Cannot "pop" after locking');
+	if (this._lockInd) throw new TypeError('NANOS: Cannot "pop" after index lock');
 	if (!this._next) return undefined;
 	return this.delete(--this._next, opts);
     }
@@ -633,7 +656,7 @@ export class NANOS {
      * @returns {this}
      */
     push (...values) {
-	if (this._locked) throw new TypeError('NANOS: Cannot push after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot "push" after locking');
 	const batch = this._rio?.batch || ((cb) => cb());
 	const options = this._options, transform = options.transform;
 	const pushEntries = (entries, next = 0) => {
@@ -728,7 +751,7 @@ export class NANOS {
      * @returns {this}
      */
     reverse () {
-	if (this._locked) throw new TypeError('NANOS: Cannot reverse after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot "reverse" after locking');
 	const s = this._storage, nks = [], ns = {}, last = this._next - 1;
 	for (const ok of this._keys.toReversed()) {
 	    const nk = isIndex(ok) ? String(last - parseInt(ok, 10)) : ok;
@@ -785,7 +808,7 @@ export class NANOS {
      */
     set (key, value, opts = {}) {
 	opts = this.#getOpts(opts, 'insert');
-	if (this._locked) throw new TypeError('NANOS: Cannot set after locking');
+	if (this._locked) throw new TypeError('NANOS: Cannot "set" after locking');
 	if (key === undefined) key = this._next;
 	key = this.#wrapKey(key);
 	if (key === undefined) return;
@@ -860,7 +883,7 @@ export class NANOS {
      * transform - Promote map-ish or set-ish values into nested NANOS objects,
      *     or merge them into the containing NANOS object, depending on the setting
      */
-    setOptions (options) {
+    setOpts (options) {
 	Object.assign(this._options, options);
 	return this;
     }
@@ -882,8 +905,8 @@ export class NANOS {
      * @returns {*}
      */
     shift (opts = {}) {
-	if (this._locked) throw new TypeError('NANOS: Cannot shift after locking');
-	if (this._lockInd) throw new TypeError('NANOS: Cannot shift after index lock');
+	if (this._locked) throw new TypeError('NANOS: Cannot "shift" after locking');
+	if (this._lockInd) throw new TypeError('NANOS: Cannot "shift" after index lock');
 	if (!this._next) return undefined;
 	const batch = this._rio?.batch || ((cb) => cb());
 	return batch(() => {
@@ -926,12 +949,12 @@ export class NANOS {
     }
 
     /**
-     * Returns a reversed copy.
+     * Returns a reversed shallow copy.
      * @returns {NANOS}
      */
     toReversed () {
 	this._rio?.depend();
-	return this.similar().fromPairs(this.toJSON()).reverse();
+	return this.similar().from(this).reverse();
     }
 
     /**
@@ -952,7 +975,7 @@ export class NANOS {
     toSLID ({ compact = false, redact = false } = {}) {
 	this._rio?.depend();
 	const escape = (str) => escapeJSString(str).replace(/\)]/g, ')\\]');
-	function squished (items) {
+	const squished = (items) => {
 	    const parts = [];
 	    for (const item of items) {
 		const tail = parts.length ? parts.slice(-1).slice(-1) : '';
@@ -961,8 +984,8 @@ export class NANOS {
 		parts.push(item);
 	    }
 	    return parts.join('');
-	}
-	function valueToStr (value) {
+	};
+	const valueToStr = (value) => {
 	    switch (value) {
 	    case false: return '@f';
 	    case null: return '@n';
@@ -981,7 +1004,7 @@ export class NANOS {
 	    if (value instanceof NANOS) return '[' + itemsToStr(value) + ']';
 	    return '@u/*??*/';
 	};
-	function itemsToStr (node) {
+	const itemsToStr = (node) => {
 	    let expInd = 0;			// Expected next index
 	    if (redact && node._redacted === true) return ((redact === 'comment') ? '/*???*/' : '');
 	    const items = [];
@@ -1005,6 +1028,11 @@ export class NANOS {
 	return '[(' + itemsToStr(this).replace(/\)\]/g, ')\\]') + ')]';
     }
 
+    static toSLID (value, options = {}) {
+	if (value instanceof NANOS) return value.toSLID(options);
+	else return ((new NANOS(value)).toSLID(options));
+    }
+
     /**
      * Converts to a string (SLID format).
      * @param {object} [options]
@@ -1022,8 +1050,8 @@ export class NANOS {
      * @returns {this}
      */
     unshift (...values) {
-	if (this._locked) throw new TypeError('NANOS: Cannot unshift after locking');
-	if (this._lockInd) throw new TypeError('NANOS: Cannot unshift after index lock');
+	if (this._locked) throw new TypeError('NANOS: Cannot "unshift" after locking');
+	if (this._lockInd) throw new TypeError('NANOS: Cannot "unshift" after index lock');
 	const batch = this._rio?.batch || ((cb) => cb());
 	batch(() => values.toReversed().forEach((outer) => {
 	    if (!(outer instanceof NANOS)) outer = this.similar(outer);
@@ -1061,11 +1089,8 @@ export class NANOS {
 
 // Alias .get() to .at()
 NANOS.prototype.get = NANOS.prototype.at;
-
-NANOS.toSLID = (value, options = {}) => {
-    if (value instanceof NANOS) return value.toSLID(options);
-    else return new NANOS(value).toSLID(options);
-};
+// Alias .setOpts() to .setOptions()
+NANOS.prototype.setOptions = NANOS.prototype.setOpts;
 
 // Make parseQJSON and parseSLID directly importable
 export const { parseQJSON, parseSLID, toSLID } = NANOS;

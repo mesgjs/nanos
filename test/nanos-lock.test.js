@@ -18,8 +18,8 @@ Deno.test("NANOS lockAll and lockKeys", () => {
     assertThrows(() => { n.set(0, "z"); }, TypeError);
     const n2 = new NANOS("b");
     n2.lockKeys();
-    assertThrows(() => n2.set(0, 'y'), TypeError, 'NANOS: Cannot set after locking');
-    assertThrows(() => n2.set('new', 'val'), TypeError, 'NANOS: Cannot set after locking');
+    assertThrows(() => n2.set(0, 'y'), TypeError, 'NANOS: Cannot "set" after locking');
+    assertThrows(() => n2.set('new', 'val'), TypeError, 'NANOS: Cannot "set" after locking');
 });
 
 Deno.test("NANOS isLocked", () => {
