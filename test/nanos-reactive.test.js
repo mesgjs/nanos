@@ -203,3 +203,389 @@ Deno.test('similar() Method and Independent Reactivity', async () => {
     assertEquals(child.size, 1);
     assertEquals(parentRecalcs, 1);
 });
+
+Deno.test('next Property Reactivity', async () => {
+    const n = new NANOS(1, 2, 3).setRIO(rio());
+    let nextValue;
+
+    reactive({
+        def: () => {
+            nextValue = n.next;
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(nextValue, 3);
+
+    n.push(4);
+    await reactive.wait();
+    assertEquals(nextValue, 4);
+
+    n.pop();
+    await reactive.wait();
+    assertEquals(nextValue, 3);
+
+    n.next = 5;
+    await reactive.wait();
+    assertEquals(nextValue, 5);
+
+    n.delete(2);
+    await reactive.wait();
+    assertEquals(nextValue, 5); // Sparse array, next unchanged
+});
+
+Deno.test('indexKeys() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    n.set('name', 'c');
+    let indexKeys;
+
+    reactive({
+        def: () => {
+            indexKeys = [...n.indexKeys()];
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(indexKeys, ['0', '1']);
+
+    n.set(2, 'd');
+    await reactive.wait();
+    assertEquals(indexKeys, ['0', '1', '2']);
+
+    n.set('anotherName', 'e');
+    await reactive.wait();
+    assertEquals(indexKeys, ['0', '1', '2']); // Named key doesn't affect indexKeys
+
+    n.delete(1);
+    await reactive.wait();
+    assertEquals(indexKeys, ['0', '2']);
+});
+
+Deno.test('namedKeys() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set('name1', 'b');
+    n.set('name2', 'c');
+    let namedKeys;
+
+    reactive({
+        def: () => {
+            namedKeys = [...n.namedKeys()];
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(namedKeys, ['name1', 'name2']);
+
+    n.set('name3', 'd');
+    await reactive.wait();
+    assertEquals(namedKeys, ['name1', 'name2', 'name3']);
+
+    n.set(1, 'e');
+    await reactive.wait();
+    assertEquals(namedKeys, ['name1', 'name2', 'name3']); // Index doesn't affect namedKeys
+
+    n.delete('name1');
+    await reactive.wait();
+    assertEquals(namedKeys, ['name2', 'name3']);
+});
+
+Deno.test('indexEntries() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    n.set('name', 'c');
+    let indexEntries;
+
+    reactive({
+        def: () => {
+            indexEntries = [...n.indexEntries()];
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(indexEntries, [['0', 'a'], ['1', 'b']]);
+
+    n.set(2, 'd');
+    await reactive.wait();
+    assertEquals(indexEntries, [['0', 'a'], ['1', 'b'], ['2', 'd']]);
+
+    n.set('anotherName', 'e');
+    await reactive.wait();
+    assertEquals(indexEntries, [['0', 'a'], ['1', 'b'], ['2', 'd']]); // Named key doesn't affect
+
+    n.delete(0);
+    await reactive.wait();
+    assertEquals(indexEntries, [['1', 'b'], ['2', 'd']]);
+});
+
+Deno.test('namedEntries() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set('name1', 'b');
+    n.set('name2', 'c');
+    let namedEntries;
+
+    reactive({
+        def: () => {
+            namedEntries = [...n.namedEntries()];
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(namedEntries, [['name1', 'b'], ['name2', 'c']]);
+
+    n.set('name3', 'd');
+    await reactive.wait();
+    assertEquals(namedEntries, [['name1', 'b'], ['name2', 'c'], ['name3', 'd']]);
+
+    n.set(1, 'e');
+    await reactive.wait();
+    assertEquals(namedEntries, [['name1', 'b'], ['name2', 'c'], ['name3', 'd']]); // Index doesn't affect
+
+    n.delete('name1');
+    await reactive.wait();
+    assertEquals(namedEntries, [['name2', 'c'], ['name3', 'd']]);
+});
+
+Deno.test('keyOf() Reactivity on Key Changes', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    n.set(2, 'a');
+    let key;
+
+    reactive({
+        def: () => {
+            key = n.keyOf('a');
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(key, '0');
+
+    n.delete(0);
+    await reactive.wait();
+    assertEquals(key, '2');
+
+    n.set(3, 'a');
+    await reactive.wait();
+    assertEquals(key, '2'); // Still first match
+
+    n.delete(2);
+    await reactive.wait();
+    assertEquals(key, '3');
+
+    n.delete(3);
+    await reactive.wait();
+    assertEquals(key, undefined);
+});
+
+Deno.test('lastKeyOf() Reactivity on Key Changes', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    n.set(2, 'a');
+    let key;
+
+    reactive({
+        def: () => {
+            key = n.lastKeyOf('a');
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(key, '2');
+
+    n.set(3, 'a');
+    await reactive.wait();
+    assertEquals(key, '3');
+
+    n.delete(3);
+    await reactive.wait();
+    assertEquals(key, '2');
+
+    n.delete(0);
+    n.delete(2);
+    await reactive.wait();
+    assertEquals(key, undefined);
+});
+
+Deno.test('includes() Reactivity on Key Changes', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    let includesA;
+
+    reactive({
+        def: () => {
+            includesA = n.includes('a');
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(includesA, true);
+
+    n.delete(0);
+    await reactive.wait();
+    assertEquals(includesA, false);
+
+    n.set(2, 'a');
+    await reactive.wait();
+    assertEquals(includesA, true);
+});
+
+Deno.test('storage Property Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    let storageKeyCount;
+
+    reactive({
+        def: () => {
+            storageKeyCount = Object.keys(n.storage).length;
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(storageKeyCount, 0);
+
+    n.set('a', 1);
+    await reactive.wait();
+    assertEquals(storageKeyCount, 1);
+
+    n.set('b', 2);
+    await reactive.wait();
+    assertEquals(storageKeyCount, 2);
+
+    n.delete('a');
+    await reactive.wait();
+    assertEquals(storageKeyCount, 1);
+});
+
+Deno.test('reverseEntries() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    n.set(2, 'c');
+    let reverseEntries;
+
+    reactive({
+        def: () => {
+            reverseEntries = [...n.reverseEntries()];
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(reverseEntries, [['2', 'c'], ['1', 'b'], ['0', 'a']]);
+
+    n.set(3, 'd');
+    await reactive.wait();
+    assertEquals(reverseEntries, [['3', 'd'], ['2', 'c'], ['1', 'b'], ['0', 'a']]);
+
+    n.delete(1);
+    await reactive.wait();
+    assertEquals(reverseEntries, [['3', 'd'], ['2', 'c'], ['0', 'a']]);
+});
+
+Deno.test('pairs() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set(0, 'a');
+    n.set(1, 'b');
+    let pairs;
+
+    reactive({
+        def: () => {
+            pairs = n.pairs();
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(pairs, ['0', 'a', '1', 'b']);
+
+    n.set(2, 'c');
+    await reactive.wait();
+    assertEquals(pairs, ['0', 'a', '1', 'b', '2', 'c']);
+
+    n.delete(0);
+    await reactive.wait();
+    assertEquals(pairs, ['1', 'b', '2', 'c']);
+});
+
+Deno.test('isLocked() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set('key', 'value');
+    let isLockedAll, isLockedKey;
+
+    reactive({
+        def: () => {
+            isLockedAll = n.isLocked();
+            isLockedKey = n.isLocked('key');
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(isLockedAll, false);
+    assertEquals(isLockedKey, false);
+
+    n.lockKeys();
+    await reactive.wait();
+    assertEquals(isLockedAll, true);
+    assertEquals(isLockedKey, false);
+
+    n.lock('key');
+    await reactive.wait();
+    assertEquals(isLockedKey, true);
+});
+
+Deno.test('isRedacted() Reactivity', async () => {
+    const n = new NANOS().setRIO(rio());
+    n.set('key', 'value');
+    let isRedacted;
+
+    reactive({
+        def: () => {
+            isRedacted = n.isRedacted('key');
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(isRedacted, false);
+
+    n.redact('key');
+    await reactive.wait();
+    assertEquals(isRedacted, true);
+});
+
+Deno.test('Manual depend() Call', async () => {
+    const n = new NANOS().setRIO(rio());
+    let recalcs = 0;
+
+    reactive({
+        def: () => {
+            recalcs++;
+            n.depend(); // Manual dependency registration
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(recalcs, 1);
+
+    n.set('a', 1);
+    await reactive.wait();
+    assertEquals(recalcs, 2); // Should be notified even without accessing properties
+});

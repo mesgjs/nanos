@@ -132,7 +132,11 @@ values.
 
 # Examples
 
-## A Simple HTML Document
+- `[(value1 keyA=valueA value2 keyB=[value3 keyC=2] value4)]`
+  - Positional values `value1` through `value4` at `0`, `1`, `['keyB', 0]`, and `2`.
+  - Named values with keys `keyA`, `keyB`, and `['keyB', 'keyC']`.
+
+## Representation Of A Simple HTML Document Structure
 
 ```
 [(html
