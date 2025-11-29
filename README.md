@@ -265,6 +265,23 @@ Parses a SLID (Static List Data) formatted string into a NANOS instance or tree 
 *   **Returns**: A new NANOS instance.
 * See the included SLID documentation for details.
 
+### `.pathSet(path, [opts])`
+Sets or adds a value along a key path with auto-vivification. Automatically creates intermediate NANOS instances as needed to traverse the path.
+*   **`path`**: The key path to traverse. Can be a single key or an array of keys.
+*   **`opts.to`**: Value to set at the final key in the path.
+*   **`opts.first`**: Value to unshift at the target path.
+*   **`opts.next`**: Value to push at the target path.
+*   **`opts.insert`**: If `true` with `opts.to`, insert instead of append.
+*   **`opts.raw`**: If `true` with `opts.to`, set raw value without RIO processing.
+*   **Returns**: Object with `base` (this instance), `leaf` (target NANOS), and operation-specific properties (`key`/`value` for `to`, `first` for unshift, `next` for push).
+* Auto-vivification means that if any intermediate keys in the path don't exist or don't contain NANOS instances, they will be automatically created/overwritten. The path is always traversed and extended as needed, even if no operation is specified.
+* `opts.to` cannot be combined with `opts.first` or `opts.next`, but `opts.first` and `opts.next` can be used together.
+* Examples:
+  * `n.pathSet(['user', 'profile', 'name'], { to: 'Alice' })` - Sets a value at a nested path
+  * `n.pathSet(['data', 'items'], { next: 'newItem' })` - Pushes a value to a nested array
+  * `n.pathSet(['data', 'items'], { first: 'firstItem' })` - Unshifts a value to a nested array
+  * `n.pathSet(['data', 'items'], { first: 'a', next: 'z' })` - Both unshifts and pushes to a nested array
+
 ### `.pop([opts])`
 Removes and returns the last indexed value.
 *   **`opts.raw`**: If `true`, returns the raw (potentially reactive) value.

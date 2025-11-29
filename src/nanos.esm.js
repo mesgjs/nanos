@@ -634,6 +634,62 @@ export class NANOS {
 	}
 
 	/**
+	 * Sets or adds a value along a key path with auto-vivification.
+	 * Automatically creates intermediate NANOS instances as needed to traverse the path.
+	 * @param {string|number|Array<(string|number)>} path - The key path to traverse. Can be a single key or an array of keys.
+	 * @param {object} [opts] - Options object
+	 * @param {*} [opts.to] - Value to set at the final key in the path
+	 * @param {*} [opts.first] - Value to unshift at the target path
+	 * @param {*} [opts.next] - Value to push at the target path
+	 * @param {boolean} [opts.insert=false] - If true with `opts.to`, insert instead of append
+	 * @param {boolean} [opts.raw=false] - If true with `opts.to`, set raw value without RIO processing
+	 * @returns {{base: NANOS, leaf: NANOS, key?: (string|number), value?: *, first?: *, next?: *}} Object with `base` (this instance), `leaf` (target NANOS), and operation-specific properties (`key`/`value` for `to`, `first` for unshift, `next` for push)
+	 * @example
+	 * // Set a value at a nested path
+	 * n.pathSet(['user', 'profile', 'name'], { to: 'Alice' });
+	 *
+	 * // Push a value to a nested array
+	 * n.pathSet(['data', 'items'], { next: 'newItem' });
+	 *
+	 * // Unshift a value to a nested array
+	 * n.pathSet(['data', 'items'], { first: 'firstItem' });
+	 */
+	pathSet (path, opts = {}) {
+		// Auto-vivifying traversal
+		const avt = (path) => {
+			let leaf = this;
+			for (const key of path) {
+				let val = leaf.at(key);
+				if (!(val instanceof NANOS)) {
+					val = leaf.similar();
+					leaf.set(key, val);
+				}
+				leaf = val;
+			}
+			return leaf;
+		};
+		if (!Array.isArray(path)) path = [path];
+		if (Object.hasOwn(opts, 'to') && path.length) {
+			const { to: value, insert=false, raw=false } = opts;
+			const leaf = avt(path.slice(0, -1)), key = path.slice(-1)[0];
+			leaf.set(key, value, { insert, raw });
+			return { base: this, leaf, key, value };
+		}
+		const leaf = avt(path), res = { base: this, leaf };
+		if (Object.hasOwn(opts, 'first')) {
+			const first = opts.first;
+			leaf.unshift(first);
+			res.first = first;
+		}
+		if (Object.hasOwn(opts, 'next')) {
+			const next = opts.next;
+			leaf.push(next);
+			res.next = next;
+		}
+		return res;
+	}
+
+	/**
 	 * Like Array.pop (only applies to indexed values).
 	 * @param {object} [opts] Options block, passed to delete
 	 * @param {boolean} [opts.raw=false] Return the raw, rather than final, popped value
