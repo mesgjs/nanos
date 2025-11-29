@@ -295,6 +295,137 @@ Deno.test("NANOS pairs", () => {
     assertEquals(n.pairs(true), [0, "a", 2, "b", "foo", "bar"]);
 });
 
+Deno.test("NANOS pathSet", async (t) => {
+    await t.step("single key with 'to' option", () => {
+        const n = new NANOS();
+        const result = n.pathSet("name", { to: "Alice" });
+        assertEquals(n.at("name"), "Alice");
+        assertEquals(result.base, n);
+        assertEquals(result.leaf, n);
+        assertEquals(result.key, "name");
+        assertEquals(result.value, "Alice");
+    });
+
+    await t.step("nested path with auto-vivification", () => {
+        const n = new NANOS();
+        const result = n.pathSet(["user", "profile", "name"], { to: "Bob" });
+        assertEquals(n.at(["user", "profile", "name"]), "Bob");
+        assert(n.at("user") instanceof NANOS);
+        assert(n.at(["user", "profile"]) instanceof NANOS);
+        assertEquals(result.base, n);
+        assert(result.leaf instanceof NANOS);
+        assertEquals(result.key, "name");
+        assertEquals(result.value, "Bob");
+    });
+
+    await t.step("deep nesting", () => {
+        const n = new NANOS();
+        const result = n.pathSet(["a", "b", "c", "d"], { to: "deep" });
+        assertEquals(n.at(["a", "b", "c", "d"]), "deep");
+        assertEquals(result.base, n);
+        assertEquals(result.key, "d");
+        assertEquals(result.value, "deep");
+    });
+
+    await t.step("numeric indices in path", () => {
+        const n = new NANOS();
+        const result = n.pathSet([0, "data", 1], { to: "value" });
+        assertEquals(n.at([0, "data", 1]), "value");
+        assert(n.at(0) instanceof NANOS);
+        assertEquals(result.key, 1);
+        assertEquals(result.value, "value");
+    });
+
+    await t.step("using 'next' option to push values", () => {
+        const n = new NANOS();
+        const result1 = n.pathSet(["items"], { next: "first" });
+        const result2 = n.pathSet(["items"], { next: "second" });
+        assertEquals(n.at(["items", 0]), "first");
+        assertEquals(n.at(["items", 1]), "second");
+        assertEquals(result1.base, n);
+        assert(result1.leaf instanceof NANOS);
+        assertEquals(result1.next, "first");
+        assertEquals(result2.next, "second");
+    });
+
+    await t.step("using 'first' option to unshift values", () => {
+        const n = new NANOS();
+        const result1 = n.pathSet(["items"], { next: "second" });
+        const result2 = n.pathSet(["items"], { first: "first" });
+        assertEquals(n.at(["items", 0]), "first");
+        assertEquals(n.at(["items", 1]), "second");
+        assertEquals(result1.next, "second");
+        assertEquals(result2.first, "first");
+    });
+
+    await t.step("using 'insert' option", () => {
+        const n = new NANOS();
+        const result = n.pathSet(["data", "key"], { to: "value", insert: true });
+        assertEquals(n.at(["data", "key"]), "value");
+        assertEquals(result.key, "key");
+        assertEquals(result.value, "value");
+    });
+
+    await t.step("overwriting existing values", () => {
+        const n = new NANOS();
+        n.pathSet(["config", "setting"], { to: "old" });
+        const result = n.pathSet(["config", "setting"], { to: "new" });
+        assertEquals(n.at(["config", "setting"]), "new");
+        assertEquals(result.value, "new");
+    });
+
+    await t.step("return structure with 'to' option", () => {
+        const n = new NANOS();
+        const result = n.pathSet(["a", "b"], { to: "value" });
+        assertEquals(result.base, n);
+        assert(result.leaf instanceof NANOS);
+        assertEquals(result.key, "b");
+        assertEquals(result.value, "value");
+        assertEquals(result.leaf.at("b"), "value");
+    });
+
+    await t.step("empty path with 'next' operates on root", () => {
+        const n = new NANOS();
+        const result = n.pathSet([], { next: "item" });
+        assertEquals(result.base, n);
+        assertEquals(result.leaf, n);
+        assertEquals(result.next, "item");
+        assertEquals(n.at(0), "item");
+    });
+
+    await t.step("preserves existing structure", () => {
+        const n = new NANOS();
+        n.set("existing", "data");
+        n.pathSet(["new", "path"], { to: "value" });
+        assertEquals(n.at("existing"), "data");
+        assertEquals(n.at(["new", "path"]), "value");
+    });
+
+    await t.step("mixed key types in path", () => {
+        const n = new NANOS();
+        const result = n.pathSet([0, "name", 1, "value"], { to: "mixed" });
+        assertEquals(n.at([0, "name", 1, "value"]), "mixed");
+        assertEquals(result.key, "value");
+        assertEquals(result.value, "mixed");
+    });
+
+    await t.step("combined 'first' and 'next' options", () => {
+        const n = new NANOS();
+        const result = n.pathSet(["items"], { first: "a", next: "b" });
+        assertEquals(result.base, n);
+        assertEquals(result.first, "a");
+        assertEquals(result.next, "b");
+        assertEquals(n.at(["items", 0]), "a");
+        assertEquals(n.at(["items", 1]), "b");
+    });
+
+    await t.step("using 'raw' option", () => {
+        const n = new NANOS();
+        const result = n.pathSet(["data", "key"], { to: "rawValue", raw: true });
+        assertEquals(n.at(["data", "key"]), "rawValue");
+        assertEquals(result.value, "rawValue");
+    });
+});
 Deno.test("NANOS pop", () => {
     const n = new NANOS("a", "b");
     assertEquals(n.pop(), "b");
@@ -397,48 +528,50 @@ Deno.test("NANOS values", () => {
     assertEquals([...n.values()], ["a", "b", "d"]);
 });
 
-Deno.test("parseSLID basic", () => {
-    const n = parseSLID("[(a b c)]");
-    assertEquals(n.size, 3);
-    assertEquals(n.at(0), 'a');
-    assertEquals(n.at(1), 'b');
-    assertEquals(n.at(2), 'c');
-});
+Deno.test("SLID and QJSON", async (t) => {
+    await t.step("parseSLID basic", () => {
+        const n = parseSLID("[(a b c)]");
+        assertEquals(n.size, 3);
+        assertEquals(n.at(0), 'a');
+        assertEquals(n.at(1), 'b');
+        assertEquals(n.at(2), 'c');
+    });
 
-Deno.test("parseSLID with syntax error", () => {
-    assertThrows(() => parseSLID("[ ( a b c ) ]"), SyntaxError, "Missing SLID boundary marker(s)");
-});
+    await t.step("parseSLID with syntax error", () => {
+        assertThrows(() => parseSLID("[ ( a b c ) ]"), SyntaxError, "Missing SLID boundary marker(s)");
+    });
 
-Deno.test("toSLID basic", () => {
-    const n = new NANOS("a", "b", "c");
-    assertEquals(n.toSLID(), "[(a b c)]");
-});
+    await t.step("toSLID basic", () => {
+        const n = new NANOS("a", "b", "c");
+        assertEquals(n.toSLID(), "[(a b c)]");
+    });
 
-Deno.test("parse and toSLID complex", () => {
-    const slid = "[(foo='bar' 1='qux' [ a b c ] 3=@n)]";
-    const n = parseSLID(slid);
-    assertEquals(n.at('foo'), 'bar');
-    assertEquals(n.at(0), undefined);
-    assertEquals(n.at(1), 'qux');
-    assert(n.at(2) instanceof NANOS);
-    assertEquals(n.at(2).toJSON().pairs, [0, 'a', 1, 'b', 2, 'c']);
-    assertEquals(n.at(3), null);
+    await t.step("parse and toSLID complex", () => {
+        const slid = "[(foo='bar' 1='qux' [ a b c ] 3=@n)]";
+        const n = parseSLID(slid);
+        assertEquals(n.at('foo'), 'bar');
+        assertEquals(n.at(0), undefined);
+        assertEquals(n.at(1), 'qux');
+        assert(n.at(2) instanceof NANOS);
+        assertEquals(n.at(2).toJSON().pairs, [0, 'a', 1, 'b', 2, 'c']);
+        assertEquals(n.at(3), null);
 
-    // This won't be identical due to key ordering, but will be equivalent
-    const outSlid = n.toSLID();
-    const n2 = parseSLID(outSlid);
-    assertEquals(n.toJSON(), n2.toJSON());
-});
+        // This won't be identical due to key ordering, but will be equivalent
+        const outSlid = n.toSLID();
+        const n2 = parseSLID(outSlid);
+        assertEquals(n.toJSON(), n2.toJSON());
+    });
 
-Deno.test("parseQJSON", () => {
-    const n = parseQJSON("{ a: 1, b: [2, 3], c: {d: 4} }");
-    assertEquals(n.at('a'), 1);
-    assert(n.at('b') instanceof NANOS);
-    assertEquals(n.at('b').at(1), 3);
-    assert(n.at('c').at('d'), 4);
-});
+    await t.step("parseQJSON", () => {
+        const n = parseQJSON("{ a: 1, b: [2, 3], c: {d: 4} }");
+        assertEquals(n.at('a'), 1);
+        assert(n.at('b') instanceof NANOS);
+        assertEquals(n.at('b').at(1), 3);
+        assert(n.at('c').at('d'), 4);
+    });
 
-Deno.test("toSLID function", () => {
-    const slid = toSLID(["a", "b"]);
-    assertEquals(slid, "[(a b)]");
+    await t.step("toSLID function", () => {
+        const slid = toSLID(["a", "b"]);
+        assertEquals(slid, "[(a b)]");
+    });
 });
