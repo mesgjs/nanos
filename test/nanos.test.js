@@ -514,6 +514,13 @@ Deno.test("NANOS toObject", async (t) => {
         assertEquals(Object.getPrototypeOf(obj), null);
     });
 
+    await t.step("object mode with only indexed values", () => {
+        const n = new NANOS("a", "b", "c");
+        const obj = n.toObject();
+        assertEquals(Object.getPrototypeOf(obj), null);
+        assertEquals(obj, { 0: "a", 1: "b", 2: "c" });
+    });
+
     await t.step("array mode with only indexed values", () => {
         const n = new NANOS("a", "b", "c");
         const arr = n.toObject({ array: true });
