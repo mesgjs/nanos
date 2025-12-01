@@ -1005,6 +1005,27 @@ export class NANOS {
 	}
 
 	/**
+	 * Return a (potentially nested) plain Object view of the NANOS.
+	 * @param {object} [opts] Options object
+	 * @param {boolean} [opts.array=false] Use arrays for levels with no named keys
+	 * @param {boolean} [opts.raw=false] Return raw values instead
+	 * @returns {object}
+	 */
+	toObject (opts = {}) {
+		let isArray = opts?.array, obj = isArray ? [] : Object.create(null);
+		for (const key of this._keys) {
+			if (isArray && !isIndex(key)) {
+				obj = Object.setPrototypeOf(Object.fromEntries(Object.entries(obj)), null);
+				isArray = false;
+			}
+			const value = this.at(key, opts);
+			if (value instanceof NANOS) obj[key] = value.toObject(opts);
+			else obj[key] = value;
+		}
+		return obj;
+	}
+
+	/**
 	 * Returns a reversed shallow copy.
 	 * @returns {NANOS}
 	 */

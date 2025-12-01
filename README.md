@@ -363,6 +363,19 @@ Creates a new NANOS instance with the same configuration as the current one.
 Gets the underlying storage object, which contains the key-value data.
 *   **Returns**: The internal storage object.
 
+### `.toObject([opts])`
+Returns a plain Object (or Array) view of the NANOS instance, recursively converting nested NANOS instances.
+*   **`opts.array`**: If `true`, returns an array for levels with only indexed keys. If a named key is encountered, converts to a plain object.
+*   **`opts.raw`**: If `true`, returns raw (potentially reactive) values instead of final values.
+*   **Returns**: A plain object (or array) representation.
+* The returned object has a `null` prototype (created with [`Object.create(null)`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create:1)) unless it's an array.
+* Nested NANOS instances are recursively converted to plain objects/arrays.
+* When `opts.array` is `true`, the result starts as an array but converts to an object if any named (non-index) keys are present.
+* Examples:
+  * `new NANOS("a", "b", { foo: "bar" }).toObject()` → `{ 0: "a", 1: "b", foo: "bar" }`
+  * `new NANOS("a", "b", "c").toObject({ array: true })` → `["a", "b", "c"]`
+  * `new NANOS("a", { foo: "bar" }).toObject({ array: true })` → `{ 0: "a", foo: "bar" }` (converts to object)
+
 ### `.toReversed()`
 Returns a new, reversed copy of the instance.
 *   **Returns**: A new NANOS instance.

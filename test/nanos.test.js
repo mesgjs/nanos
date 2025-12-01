@@ -503,6 +503,113 @@ Deno.test("NANOS storage", () => {
     assertEquals(storage.foo, "bar");
 });
 
+Deno.test("NANOS toObject", async (t) => {
+    await t.step("basic object conversion", () => {
+        const n = new NANOS("a", "b", "c", { foo: "bar" });
+        const obj = n.toObject();
+        assertEquals(obj[0], "a");
+        assertEquals(obj[1], "b");
+        assertEquals(obj[2], "c");
+        assertEquals(obj.foo, "bar");
+        assertEquals(Object.getPrototypeOf(obj), null);
+    });
+
+    await t.step("array mode with only indexed values", () => {
+        const n = new NANOS("a", "b", "c");
+        const arr = n.toObject({ array: true });
+        assert(Array.isArray(arr));
+        assertEquals(arr, ["a", "b", "c"]);
+    });
+
+    await t.step("array mode converts to object when named keys present", () => {
+        const n = new NANOS("a", "b", { foo: "bar" });
+        const obj = n.toObject({ array: true });
+        assertEquals(Array.isArray(obj), false);
+        assertEquals(obj[0], "a");
+        assertEquals(obj[1], "b");
+        assertEquals(obj.foo, "bar");
+    });
+
+    await t.step("nested NANOS conversion", () => {
+        const inner = new NANOS("x", "y");
+        const n = new NANOS([inner], { key: "value" });
+        const obj = n.toObject();
+        assertEquals(obj[0][0], "x");
+        assertEquals(obj[0][1], "y");
+        assertEquals(obj.key, "value");
+    });
+
+    await t.step("deeply nested NANOS", () => {
+        const n = new NANOS().setOpts({ transform: true }).push([[["bottom"]]]);
+        const obj = n.toObject();
+        assertEquals(obj[0][0][0], "bottom");
+    });
+
+    await t.step("sparse arrays", () => {
+        const n = new NANOS(["a", , "c"]);
+        const obj = n.toObject({ array: true });
+        assert(Array.isArray(obj));
+        assertEquals(obj[0], "a");
+        assertEquals(Object.hasOwn(obj, 1), false);
+        assertEquals(obj[2], "c");
+    });
+
+    await t.step("mixed nested structures", () => {
+        const items = new NANOS("item1", "item2");
+        const n = new NANOS([items], { name: "test" });
+        const obj = n.toObject();
+        assertEquals(obj[0][0], "item1");
+        assertEquals(obj[0][1], "item2");
+        assertEquals(obj.name, "test");
+    });
+
+    await t.step("array mode with nested NANOS", () => {
+        const inner = new NANOS("x", "y");
+        const n = new NANOS([inner], "b");
+        const arr = n.toObject({ array: true });
+        assert(Array.isArray(arr));
+        assert(Array.isArray(arr[0]));
+        assertEquals(arr[0], ["x", "y"]);
+        assertEquals(arr[1], "b");
+    });
+
+    await t.step("empty NANOS", () => {
+        const n = new NANOS();
+        const obj = n.toObject();
+        assertEquals(Object.keys(obj).length, 0);
+        assertEquals(Object.getPrototypeOf(obj), null);
+    });
+
+    await t.step("empty NANOS with array mode", () => {
+        const n = new NANOS();
+        const arr = n.toObject({ array: true });
+        assert(Array.isArray(arr));
+        assertEquals(arr.length, 0);
+    });
+
+    await t.step("raw option preserves reactive values", () => {
+        const mockReactive = (val) => ({ __reactive: true, value: val });
+        const mockRIO = {
+            batch: (cb) => cb(),
+            changed: () => {},
+            create: () => mockRIO,
+            depend: () => {},
+            get: (r) => r.value,
+            isReactive: (v) => v?.__reactive === true,
+            onSet: (nanos, key, value) => mockReactive(value)
+        };
+        const n = new NANOS().setRIO(mockRIO);
+        n.set(0, "a");
+        n.set(1, "b");
+        const objRaw = n.toObject({ raw: true });
+        assertEquals(objRaw[0].__reactive, true);
+        assertEquals(objRaw[0].value, "a");
+        const objFinal = n.toObject();
+        assertEquals(objFinal[0], "a");
+        assertEquals(objFinal[1], "b");
+    });
+});
+
 Deno.test("NANOS toJSON", () => {
     const n = new NANOS(["a", , "b"], {foo: "bar"});
     assertEquals(n.toJSON(), {
