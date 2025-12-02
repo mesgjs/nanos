@@ -594,6 +594,105 @@ Deno.test("NANOS toObject", async (t) => {
         assertEquals(arr.length, 0);
     });
 
+    await t.step("array1 mode with only indexed values", () => {
+        const n = new NANOS("a", "b", "c");
+        const arr = n.toObject({ array1: true });
+        assert(Array.isArray(arr));
+        assertEquals(arr, ["a", "b", "c"]);
+    });
+
+    await t.step("array1 mode converts to object when named keys present", () => {
+        const n = new NANOS("a", "b", { foo: "bar" });
+        const obj = n.toObject({ array1: true });
+        assertEquals(Array.isArray(obj), false);
+        assertEquals(obj[0], "a");
+        assertEquals(obj[1], "b");
+        assertEquals(obj.foo, "bar");
+    });
+
+    await t.step("empty NANOS with array1 mode returns object", () => {
+        const n = new NANOS();
+        const obj = n.toObject({ array1: true });
+        assertEquals(Array.isArray(obj), false);
+        assertEquals(Object.keys(obj).length, 0);
+        assertEquals(Object.getPrototypeOf(obj), null);
+    });
+
+    await t.step("array1 mode with nested NANOS", () => {
+        const inner = new NANOS("x", "y");
+        const n = new NANOS([inner], "b");
+        const arr = n.toObject({ array1: true });
+        assert(Array.isArray(arr));
+        assert(Array.isArray(arr[0]));
+        assertEquals(arr[0], ["x", "y"]);
+        assertEquals(arr[1], "b");
+    });
+
+    await t.step("array1 mode with empty nested NANOS", () => {
+        const empty = new NANOS();
+        const n = new NANOS([empty], "b");
+        const arr = n.toObject({ array1: true });
+        assert(Array.isArray(arr));
+        assertEquals(Array.isArray(arr[0]), false);
+        assertEquals(Object.keys(arr[0]).length, 0);
+        assertEquals(arr[1], "b");
+    });
+
+    await t.step("empty level types in standard mode", () => {
+        const empty = new NANOS();
+        const n = new NANOS([empty]);
+        const obj = n.toObject();
+        assertEquals(Array.isArray(obj[0]), false);
+        assertEquals(Object.getPrototypeOf(obj[0]), null);
+        assertEquals(Object.keys(obj[0]).length, 0);
+    });
+
+    await t.step("empty level types in array mode", () => {
+        const empty = new NANOS();
+        const n = new NANOS([empty]);
+        const obj = n.toObject({ array: true });
+        assert(Array.isArray(obj));
+        assert(Array.isArray(obj[0]));
+        assertEquals(obj[0].length, 0);
+    });
+
+    await t.step("empty level types in array1 mode", () => {
+        const empty = new NANOS();
+        const n = new NANOS([empty]);
+        const obj = n.toObject({ array1: true });
+        assert(Array.isArray(obj));
+        assertEquals(Array.isArray(obj[0]), false);
+        assertEquals(Object.getPrototypeOf(obj[0]), null);
+        assertEquals(Object.keys(obj[0]).length, 0);
+    });
+
+    await t.step("sparse arrays with array1 mode", () => {
+        const n = new NANOS(["a", , "c"]);
+        const arr = n.toObject({ array1: true });
+        assert(Array.isArray(arr));
+        assertEquals(arr[0], "a");
+        assertEquals(Object.hasOwn(arr, 1), false);
+        assertEquals(arr[2], "c");
+    });
+
+    await t.step("deeply nested with array1 mode", () => {
+        const n = new NANOS().setOpts({ transform: true }).push([[["bottom"]]]);
+        const obj = n.toObject({ array1: true });
+        assert(Array.isArray(obj));
+        assert(Array.isArray(obj[0]));
+        assert(Array.isArray(obj[0][0]));
+        assertEquals(obj[0][0][0], "bottom");
+    });
+
+    await t.step("deeply nested empty structures with array1 mode", () => {
+        const n = new NANOS().setOpts({ transform: true }).push([[[]]]);
+        const obj = n.toObject({ array1: true });
+        assert(Array.isArray(obj));
+        assertEquals(Array.isArray(obj[0]), true);
+        assertEquals(Object.keys(obj[0]).length, 1);
+        assertEquals(Object.getPrototypeOf(obj[0][0]), null);
+    });
+
     await t.step("raw option preserves reactive values", () => {
         const mockReactive = (val) => ({ __reactive: true, value: val });
         const mockRIO = {

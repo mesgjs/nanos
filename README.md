@@ -42,7 +42,7 @@ const items = new NANOS('a', 'b', { key: 'value' });
 `NANOS` allows you to add data using indexed positions or named keys.
 
 ```javascript
-const n = new NANOS(10, { name: 'example', id: 123 }, [20, 30]);
+const n = new NANOS(10, { name: 'example', id: 123 }, [20, /*empty!*/, 30]);
 
 // Access values using at() (get() is an alias)
 console.log(n.at(0));      // Output: 10
@@ -61,12 +61,12 @@ You can iterate over entries, keys, or values. The iteration order is always the
 for (const [key, value] of n.entries()) {
   console.log(`${key}: ${value}`);
 }
-// Output:
+// Output (note the absence of index 2 (sparse)):
 // 0: 10
 // name: example
 // id: 123
 // 1: 20
-// 2: 30
+// 3: 30
 ```
 
 ### Serialization with SLID
@@ -360,10 +360,12 @@ Gets the underlying storage object, which contains the key-value data.
 ### `.toObject([opts])`
 Returns a plain Object (or Array) view of the NANOS instance, recursively converting nested NANOS instances.
 *   **`opts.array`**: If `true`, returns an array for levels without named keys (i.e. empty or only index keys). A plain object is returned for levels that include named keys.
+*   **`opts.array1`**: If `true`, returns an array for levels containing *one or more* index keys and no named keys. In contrast to `array`, an empty plain object is returned for empty levels (no keys at all) instead of an empty array.
 *   **`opts.raw`**: If `true`, returns raw (potentially reactive) values instead of final values.
 *   **Returns**: A plain object (or array) representation.
 * The returned object has a `null` prototype (created with [`Object.create(null)`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create:1)) unless it's an array.
 * Nested NANOS instances are recursively converted to plain objects/arrays.
+* Limitation: At this time, the `array` versus `array1` distinction, if selected, applies across the entire, generated view. If more precision is required, it must be handled in a separate, post-processing cleanup step.
 * Examples:
   * `new NANOS("a", "b", { foo: "bar" }).toObject()` → `{ 0: "a", 1: "b", foo: "bar" }`
   * `new NANOS("a", "b", "c").toObject()` → `{ 0: "a", 1: "b", 2: "c" }`
@@ -440,7 +442,6 @@ sets: Applies when the `transform` option is `sets`
 all: Applies when the `transform` option is `all`  
 outer: Applies to outer/top-level (as opposed to inner/nested) values:  
 `push(outerValue)` versus `push([ innerValue ], { key: innerValue })`  
-normal
 original: The original object value is used  
 contents: The object contents are added to/merged with the target NANOS  
 NANOS: A new NANOS object with equivalent content is used in place of the original value  

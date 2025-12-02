@@ -1008,11 +1008,12 @@ export class NANOS {
 	 * Return a (potentially nested) plain Object view of the NANOS.
 	 * @param {object} [opts] Options object
 	 * @param {boolean} [opts.array=false] Use arrays for levels with no named keys
+	 * @param {boolean} [opts.array1=false] Use arrays for levels with no named keys AND one or more items (not empty)
 	 * @param {boolean} [opts.raw=false] Return raw values instead
 	 * @returns {object}
 	 */
 	toObject (opts = {}) {
-		let isArray = opts?.array, obj = isArray ? [] : Object.create(null);
+		let isArray = opts?.array || opts?.array1, obj = isArray ? [] : Object.create(null);
 		for (const key of this._keys) {
 			if (isArray && !isIndex(key)) {
 				obj = Object.setPrototypeOf(Object.fromEntries(Object.entries(obj)), null);
@@ -1022,7 +1023,7 @@ export class NANOS {
 			if (value instanceof NANOS) obj[key] = value.toObject(opts);
 			else obj[key] = value;
 		}
-		return obj;
+		return (isArray && opts?.array1 && !obj.length) ? Object.create(null) : obj;
 	}
 
 	/**
