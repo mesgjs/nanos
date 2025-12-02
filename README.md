@@ -42,16 +42,9 @@ const items = new NANOS('a', 'b', { key: 'value' });
 `NANOS` allows you to add data using indexed positions or named keys.
 
 ```javascript
-const n = new NANOS();
+const n = new NANOS(10, { name: 'example', id: 123 }, [20, 30]);
 
-// Add indexed values using push()
-n.push(10, 20, 30);
-
-// Add named values using set()
-n.set('name', 'example');
-n.set('id', 123);
-
-// Access values using at() or get()
+// Access values using at() (get() is an alias)
 console.log(n.at(0));      // Output: 10
 console.log(n.at('name'));  // Output: 'example'
 
@@ -64,15 +57,16 @@ console.log(n.at(-1));     // Output: 30
 You can iterate over entries, keys, or values. The iteration order is always the (constrained-index) insertion order.
 
 ```javascript
+// Continuing from above...
 for (const [key, value] of n.entries()) {
   console.log(`${key}: ${value}`);
 }
 // Output:
 // 0: 10
-// 1: 20
-// 2: 30
 // name: example
 // id: 123
+// 1: 20
+// 2: 30
 ```
 
 ### Serialization with SLID
@@ -80,13 +74,11 @@ for (const [key, value] of n.entries()) {
 The `toString()` method serializes the `NANOS` instance to the SLID format.
 
 ```javascript
-const n = new NANOS(1, 'two');
-n.set('id', 3);
-n.set('status', 'ok');
+const n = new NANOS(1, 'two', { id: 3, status: 'ok' }, 'last');
 
 const slidString = n.toString();
 console.log(slidString);
-// Output: [(1 two id=3 status=ok)]
+// Output: [(1 two id=3 status=ok last)]
 ```
 
 You can parse a SLID string back into a `NANOS` instance.
@@ -294,6 +286,8 @@ Appends one or more elements to the end of the instance.
 * If an item is a scalar value, it is added directly.
 * If an item is an array or Set, the values in the array or Set are added (preserving any array gaps).
 * If an item is a plain object or Map, the key/value entries are added.
+* If an item is another NANOS instance, all of its key/value pairs (both indexed and named) are added.
+* Index (positional) keys in the source will be relative to the previous end of the NANOS.
 * To push an array, object, Map, or Set directly, wrap it in an array (`[value]`).
 
 ### `.redact(...keys)`

@@ -1074,7 +1074,7 @@ export class NANOS {
 			case 'number': return value.toString();
 			case 'string':
 				// Word-literal or quoted string
-				if (/^[~!#$%^&*()+.,:;<>?A-Z{}_][~!@#$%^&*()+.,0-9:;<>?A-Z{}_-]*$/i.test(value)) return value;
+				if (/^[~!#$%^&*()+.,:;<>/?A-Z{}_][~!@#$%^&*()+.,0-9:;<>/?A-Z{}_-]*$/i.test(value) && value.indexOf('/*') < 0) return value;
 				return "'" + escape(value) + "'";
 			}
 			if (isPlainObject(value) || Array.isArray(value) || value instanceof Map || value instanceof Set) value = new this.constructor(value);
