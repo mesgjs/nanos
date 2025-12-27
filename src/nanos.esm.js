@@ -4,7 +4,7 @@
  * Author: Brian Katzung <briank@kappacs.com>
  */
 
-import { escapeJSString, unescapeJSString } from './vendor/escape-js.esm.js';
+import { escapeJSString, unescapeJSString } from '@escape-js';
 
 //////////////////////////////////////////////////////////////////////
 // SLID and QJSON parsing details
@@ -617,6 +617,12 @@ export class NANOS {
 				if (tokens[1] === '=') {		// Named value
 					key = parseLeft();
 					tokens.shift();
+					if (isIndex(key) && tokens[0] === '@e') {
+						// index=@e -> set .next @ index+1
+						tokens.shift();
+						result.next = Number(key) + 1;
+						continue;
+					}
 				} else if (!qj && tokens[0] === '@e') { // Empty
 					tokens.shift();
 					++result.next;
@@ -1100,6 +1106,13 @@ export class NANOS {
 						if (redact === 'comment') items.push('/*?=?*/');
 					} else items.push(valueToStr(en[0]) + '=' + valueToStr(en[1]));
 				}
+			}
+			// Encode "sparse .next"
+			switch (node._next - expInd) {
+			case 2: items.push('@e'); // Fall thru
+			case 1: items.push('@e'); // Fall thru
+			case 0: break;
+			default: items.push(`${node._next - 1}=@e`); break;
 			}
 			return (compact ? squished(items) : items.join(' '));
 		};

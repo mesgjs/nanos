@@ -382,8 +382,11 @@ Returns a JSON-representable object for `JSON.stringify()`.
 
 ### `.toSLID({ compact, redact })`
 Generates a SLID (Static List Data) formatted string.
-*   **`options`**: An object with `compact` and `redact` booleans.
-*   **Returns**: The SLID string.
+* **`options`**: An object with `compact` and `redact` booleans.
+* **Returns**: The SLID string.
+* **Note**: If the `next` value leaves a gap beyond the last item, the SLID string will encode it using `@e` (empty) or `<index>=@e` (depending on the size of the gap), such that parsing it results in the same `next` as the original.
+  * `new NANOS(['a', , ,]).toSLID();   // [(a @e @e)] (1 and 2 empty, .next = 3)`
+  * `new NANOS(['b', , , ,]).toSLID(); // [(b 3=@e)] (1 thru 3 empty, .next = 4)`
 
 ### `NANOS.toSLID(value, { options })` (static)
 Generatea a SLID-formatted string for `value`.

@@ -1,4 +1,4 @@
-import { reactive } from 'reactive/reactive.esm.js';
+import { reactive } from '@reactive';
 import { NANOS } from '../src/nanos.esm.js';
 import {
     assertEquals,
@@ -44,7 +44,7 @@ const extRio = (r) => {
 	changed: () => r.ripple(),
 	create: extRio,
 	depend: () => r.rv,
-	
+
 	get: (v) => v.rv,
 	isReactive,
 	onSet

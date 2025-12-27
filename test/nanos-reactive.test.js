@@ -1,4 +1,4 @@
-import { reactive } from 'reactive/reactive.esm.js';
+import { reactive } from '@reactive';
 import { NANOS } from '../src/nanos.esm.js';
 import {
     assertEquals,

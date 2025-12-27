@@ -3,7 +3,7 @@
 	"minify": "deno run --allow-read --allow-write --allow-env --allow-run npm:esbuild src/nanos.esm.js --outfile=dist/nanos.min.esm.js --minify --format=esm --sourcemap=external"
     },
   "imports": {
-    "escape-js/escape.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/escape-js@0.0.2/src/escape.esm.js",
-    "reactive/reactive.esm.js": "https://cdn.jsdelivr.net/gh/mesgjs/reactive@0.1.3/src/reactive.esm.js"
+    "@escape-js": "https://cdn.jsdelivr.net/gh/mesgjs/escape-js@0.0.4/src/escape.esm.js",
+    "@reactive": "https://cdn.jsdelivr.net/gh/mesgjs/reactive@0.1.6/src/reactive.esm.js"
   }
 }
