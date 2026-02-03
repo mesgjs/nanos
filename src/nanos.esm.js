@@ -913,6 +913,7 @@ export class NANOS {
 		if (changed) this._rio?.changed();
 		return value;
 	}
+
 	/**
 	 * Set a raw value, bypassing any RIO `onSet` handler.
 	 * @param {string|number} [key]
@@ -998,6 +999,25 @@ export class NANOS {
 		nn.rio = this._rio?.create();
 		if (items.length) nn.push(...items);
 		return nn;
+	}
+
+	/**
+	 * Returns an array-style slice (copy) over [start, end)
+	 * Note: NANOS slices are *sparse*
+	 * @param {number} start - Starting index
+	 * @param {number} end - Ending index
+	 */
+	slice (start = 0, end = this.next, opts = {}) {
+		if (start < 0) start = this.#wrapKey(start);
+		if (end < 0) end = this.#wrapKey(end);
+		if (end > this.next) end = this.next;
+		const result = this.similar();
+		for (let current = start; current < end; ++current) {
+			if (this.has(current)) {
+				result.set(current - start, this.at(current, opts), opts);
+			}
+		}
+		return result;
 	}
 
 	/**

@@ -552,3 +552,41 @@ Deno.test('includes() Value-Change Reactivity', async () => {
     await reactive.wait();
     assertEquals(includesTwo, true);
 });
+
+Deno.test('slice() with raw option', async () => {
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.push('a', 'b', 'c', 'd');
+
+    // Slice without raw option should return final values
+    const s1 = n.slice(1, 3);
+    assertEquals(s1.size, 2);
+    assertEquals(isReactive(s1.at(0)), false);
+    assertEquals(s1.at(0), 'b');
+    assertEquals(isReactive(s1.at(1)), false);
+    assertEquals(s1.at(1), 'c');
+
+    // Slice with raw option should return reactive values
+    const s2 = n.slice(1, 3, { raw: true });
+    assertEquals(s2.size, 2);
+    assertEquals(isReactive(s2.atRaw(0)), true);
+    assertEquals(s2.at(0), 'b');
+    assertEquals(isReactive(s2.atRaw(1)), true);
+    assertEquals(s2.at(1), 'c');
+
+    // Verify that the sliced reactive values track changes
+    let slicedVal;
+    reactive({
+        def: () => {
+            slicedVal = s2.at(0);
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slicedVal, 'b');
+
+    // Change the value in the sliced NANOS
+    s2.set(0, 'modified');
+    await reactive.wait();
+    assertEquals(slicedVal, 'modified');
+});

@@ -353,6 +353,19 @@ Creates a new NANOS instance with the same configuration as the current one.
 *   **`...items`**: Optional initial items for the new instance.
 *   **Returns**: A new NANOS instance.
 
+### `.slice([start=0], [end=this.next], [opts])`
+Returns a new NANOS instance containing a shallow copy of indexed values from `start` (inclusive) to `end` (exclusive). The slice is sparse, preserving any gaps in the original.
+*   **`start`**: Starting index (default: `0`). Negative values count from the end.
+*   **`end`**: Ending index (default: `this.next`). Negative values count from the end.
+*   **`opts.raw`**: If `true`, copies raw (potentially reactive) values instead of final values.
+*   **Returns**: A new NANOS instance with the sliced values.
+* Named keys are not included in the slice.
+* The returned NANOS has the same configuration (options and RIO) as the original.
+* Examples:
+  * `new NANOS('a', 'b', 'c', 'd').slice(1, 3)` → NANOS with `['b', 'c']` at indexes 0 and 1
+  * `new NANOS('a', 'b', 'c', 'd').slice(-2)` → NANOS with `['c', 'd']` at indexes 0 and 1
+  * `new NANOS(['a', , 'c', , 'e']).slice(0, 5)` → NANOS with `['a', , 'c', , 'e']` (sparse)
+
 ### `.storage` (getter)
 Gets the underlying storage object, which contains the key-value data.
 *   **Returns**: The internal storage object.

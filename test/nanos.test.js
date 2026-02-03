@@ -480,6 +480,43 @@ Deno.test("NANOS shift", () => {
 	assertEquals(n.shift(), undefined);
 });
 
+Deno.test("NANOS slice", () => {
+	const n = new NANOS("a", "b", {foo: 'bar'}, "c", "d", "e");
+	
+	// Basic slice
+	const s1 = n.slice(1, 4);
+	assertEquals(s1.size, 3);
+	assertEquals(s1.at(0), "b");
+	assertEquals(s1.at(1), "c");
+	assertEquals(s1.at(2), "d");
+	assertEquals(s1.next, 3);
+	
+	// Slice with negative indices
+	const s2 = n.slice(-3, -1);
+	assertEquals(s2.size, 2);
+	assertEquals(s2.at(0), "c");
+	assertEquals(s2.at(1), "d");
+	
+	// Slice with default parameters
+	const s3 = n.slice();
+	assertEquals(s3.size, 5);
+	assertEquals(s3.at(0), "a");
+	assertEquals(s3.at(4), "e");
+	
+	// Slice with sparse array
+	const sparse = new NANOS(["a", , "c", , "e"]);
+	const s4 = sparse.slice(0, 5);
+	assertEquals(s4.size, 3);
+	assertEquals(s4.at(0), "a");
+	assertEquals(s4.has(1), false);
+	assertEquals(s4.at(2), "c");
+	assertEquals(s4.has(3), false);
+	assertEquals(s4.at(4), "e");
+	
+	// Named keys are not included in slice
+	assertEquals(s1.has("foo"), false);
+});
+
 Deno.test("NANOS similar", () => {
 	const n = new NANOS();
 	n.setOptions({ transform: true });
