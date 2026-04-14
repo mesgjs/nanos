@@ -22,7 +22,8 @@ const slidPats = {
 	spc: '\\s+',				// Space
 	oth: '(?:[^\'"/[=\\]\\s]|\\/(?![*]))+',		// Other
 };
-const slidRE = new RegExp('(' + 'mlc flt int sqs dqs stok spc oth'.split(' ').map((k) => slidPats[k]).join('|') + ')', 's');
+// Single-pass lexer RE (no capturing group wrapper — used with exec())
+const slidLexRE = new RegExp('mlc flt int sqs dqs stok spc oth'.split(' ').map((k) => slidPats[k]).join('|'), 'gs');
 const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
 
 const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
@@ -578,10 +579,25 @@ export class NANOS {
 	static parseSLID (str, qj = false) {
 		let match = str.match(/\[\((.*?)\)\]/s);
 		if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
-		const tokens = match[1].replace(/\)\\\]/g, ')]').split(slidRE).filter((t) => !/^(\s*|\/\*.*\*\/)$/.test(t));
+		// Single-pass tokenization using exec() — avoids O(n) gap-string allocations
+		// from split() and the subsequent filter() pass.
+		const src = match[1].replace(/\)\\\]/g, ')]');
 		match = undefined;
+		const tokens = [];
+		slidLexRE.lastIndex = 0;
+		let m;
+		while ((m = slidLexRE.exec(src)) !== null) {
+			const t = m[0];
+			// Skip whitespace and comments
+			if (t.charCodeAt(0) <= 32 || t.charCodeAt(0) === 47 /* '/' */) continue;
+			tokens.push(t);
+		}
+		// Use an integer cursor instead of Array.shift() to avoid O(n²) behaviour.
+		let pos = 0;
+		const peek = (offset = 0) => tokens[pos + offset];
+		const consume = () => tokens[pos++];
 		const parseLeft = () => {		// Can be left of = (numbers, strings)
-			const token = tokens.shift();
+			const token = consume();
 			if (slidNum.test(token)) {
 				if (/n$/i.test(token)) return BigInt(token.slice(0, -1));
 				if (/^[+-]?0b/i.test(token)) return parseInt(token.replace(/0b/i, ''), 2);
@@ -594,48 +610,48 @@ export class NANOS {
 			return unescapeJSString(token.slice(1, -1));
 		}
 		const parseRight = () => {		// More that can be right of =
-			if (tokens[0] !== '[') {
-				if (qj) switch (tokens[0]) {
-				case 'false': tokens.shift(); return false;
-				case 'null': tokens.shift(); return null;
-				case 'true': tokens.shift(); return true;
-				} else switch (tokens[0]) {// Special values
-				case '@f': tokens.shift(); return false;
-				case '@n': tokens.shift(); return null;
-				case '@t': tokens.shift(); return true;
-				case '@u': tokens.shift(); return undefined;
+			if (peek() !== '[') {
+				if (qj) switch (peek()) {
+				case 'false': ++pos; return false;
+				case 'null': ++pos; return null;
+				case 'true': ++pos; return true;
+				} else switch (peek()) {// Special values
+				case '@f': ++pos; return false;
+				case '@n': ++pos; return null;
+				case '@t': ++pos; return true;
+				case '@u': ++pos; return undefined;
 				}
 				return parseLeft();		// Everything OK on the left
 			}
-			tokens.shift();
+			++pos;
 			return parseItems.call(this);		// Nested lists
 		}
 		const parseItems = () => {
 			const result = new NANOS();
-			while (tokens.length && tokens[0] !== ']') {
+			while (pos < tokens.length && peek() !== ']') {
 				let key;						// Default: positional
-				if (tokens[1] === '=') {		// Named value
+				if (peek(1) === '=') {		// Named value
 					key = parseLeft();
-					tokens.shift();
-					if (isIndex(key) && tokens[0] === '@e') {
+					++pos;					// consume '='
+					if (isIndex(key) && peek() === '@e') {
 						// index=@e -> set .next @ index+1
-						tokens.shift();
+						++pos;
 						result.next = Number(key) + 1;
 						continue;
 					}
-				} else if (!qj && tokens[0] === '@e') { // Empty
-					tokens.shift();
+				} else if (!qj && peek() === '@e') { // Empty
+					++pos;
 					++result.next;
 					continue;
 				}
 				result.set(key, parseRight());
 			}
-			if (tokens[0] === ']') tokens.shift();
+			if (peek() === ']') ++pos;
 			return result;
 		}
 		const result = parseItems();
 		// SLID was malformed if any tokens are left
-		if (tokens.length) throw new SyntaxError('Malformed SLID');
+		if (pos < tokens.length) throw new SyntaxError('Malformed SLID');
 		return result;
 	}
 
@@ -1082,12 +1098,57 @@ export class NANOS {
 		const squished = (items) => {
 			const parts = [];
 			for (const item of items) {
-				const tail = parts.length ? parts.slice(-1).slice(-1) : '';
+				// Use direct index access instead of two slice() calls to avoid allocations
+				const lastPart = parts.length ? parts[parts.length - 1] : '';
+				const tail = lastPart ? lastPart[lastPart.length - 1] : '';
 				const joint = tail + (item[0] || '')/* head */;
 				if (tail && !/['"\[\]]/.test(joint)) parts.push(' ');
 				parts.push(item);
 			}
 			return parts.join('');
+		};
+		// Inline serializer for plain objects/arrays/Maps/Sets — avoids allocating
+		// a full NANOS instance just to immediately serialize it.
+		const containerToStr = (value) => {
+			let keys, getVal;
+			if (Array.isArray(value)) {
+				keys = Object.keys(value);
+				getVal = (k) => value[k];
+			} else if (value instanceof Map) {
+				return '[' + itemsToStr_map(value) + ']';
+			} else if (value instanceof Set) {
+				return '[' + itemsToStr_set(value) + ']';
+			} else {
+				// plain object
+				keys = Object.keys(value);
+				getVal = (k) => value[k];
+			}
+			let expInd = 0;
+			const items = [];
+			for (const k of keys) {
+				if (isIndex(k)) {
+					const ind = parseInt(k, 10);
+					items.push(((ind === expInd) ? '' : `${ind}=`) + valueToStr(getVal(k)));
+					expInd = ind + 1;
+				} else {
+					items.push(valueToStr(k) + '=' + valueToStr(getVal(k)));
+				}
+			}
+			return '[' + (compact ? squished(items) : items.join(' ')) + ']';
+		};
+		const itemsToStr_map = (map) => {
+			const items = [];
+			for (const [k, v] of map) items.push(valueToStr(String(k)) + '=' + valueToStr(v));
+			return compact ? squished(items) : items.join(' ');
+		};
+		const itemsToStr_set = (set) => {
+			let expInd = 0;
+			const items = [];
+			for (const v of set) {
+				items.push(valueToStr(v));
+				++expInd;
+			}
+			return compact ? squished(items) : items.join(' ');
 		};
 		const valueToStr = (value) => {
 			switch (value) {
@@ -1104,27 +1165,34 @@ export class NANOS {
 				if (/^[~!#$%^&*()+.,:;<>/?A-Z{}_][~!@#$%^&*()+.,0-9:;<>/?A-Z{}_-]*$/i.test(value) && value.indexOf('/*') < 0) return value;
 				return "'" + escape(value) + "'";
 			}
-			if (isPlainObject(value) || Array.isArray(value) || value instanceof Map || value instanceof Set) value = new this.constructor(value);
+			if (isPlainObject(value) || Array.isArray(value) || value instanceof Map || value instanceof Set) return containerToStr(value);
 			if (value instanceof NANOS) return '[' + itemsToStr(value) + ']';
 			return '@u/*??*/';
 		};
 		const itemsToStr = (node) => {
 			let expInd = 0;						// Expected next index
 			if (redact && node._redacted === true) return ((redact === 'comment') ? '/*???*/' : '');
+			// Hoist redaction flags to avoid per-key method call overhead
+			const redactAll = redact && node._redacted === true;
+			const redactIndexed = redact && !!node._redacted?.[0];
 			const items = [];
-			for (const en of node.entries()) {
-				if (isIndex(en[0])) {
-					if (redact && node.isRedacted(0)) {
+			// Iterate _keys/_storage directly — avoids entries() generator overhead
+			// (closures, _rio?.depend() call, compact/raw option processing)
+			const storage = node._storage;
+			for (const k of node._keys) {
+				const v = storage[k];
+				if (isIndex(k)) {
+					if (redactIndexed) {
 						if (redact === 'comment') items.push('/*?*/');
 						continue;
 					}
-					const ind = parseInt(en[0], 10);
-					items.push(((ind === expInd) ? '' : `${ind}=`) + valueToStr(en[1]));
+					const ind = parseInt(k, 10);
+					items.push(((ind === expInd) ? '' : `${ind}=`) + valueToStr(v));
 					expInd = ind + 1;
 				} else {
-					if (redact && node.isRedacted(en[0])) {
+					if (redact && node._redacted?.[k]) {
 						if (redact === 'comment') items.push('/*?=?*/');
-					} else items.push(valueToStr(en[0]) + '=' + valueToStr(en[1]));
+					} else items.push(valueToStr(k) + '=' + valueToStr(v));
 				}
 			}
 			// Encode "sparse .next"
