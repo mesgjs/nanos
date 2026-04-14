@@ -28,7 +28,7 @@ const slidNum = new RegExp(`^(${slidPats.flt}|${slidPats.int})$`);
 
 const qjMap = { '{': '[', '}': ']', ',': ' ', ':': '=' };
 
-// Module-level word-literal regex for valueToStr (hoisted from toSLID closure — #10)
+// Module-level word-literal regex for valueToStr (hoisted from toSLID closure - #10)
 const slidWordRE = /^[~!#$%^&*()+.,:;<>/?A-Z{}_][~!@#$%^&*()+.,0-9:;<>/?A-Z{}_-]*$/i;
 
 // Module-level sentinel option objects for #getOpts fast-path (#4)
@@ -43,7 +43,7 @@ const OPTS_RAW   = { raw: true };
  * @returns {boolean}
  */
 export const isIndex = (key) => {
-	// #5: numeric fast-path — avoids regex for the common internal case
+	// #5: numeric fast-path - avoids regex for the common internal case
 	if (typeof key === 'number') return Number.isInteger(key) && key >= 0;
 	return /^(?:0|[1-9]\d*)$/.test(String(key));
 };
@@ -170,7 +170,7 @@ export class NANOS {
 		const ret = this._storage[skey];
 		if (Object.hasOwn(this._storage, skey)) {
 			delete this._storage[skey];
-			// #2: indexOf + splice instead of filter() — in-place, no new array
+			// #2: indexOf + splice instead of filter() - in-place, no new array
 			// #7: _keys stores numbers for index keys; compare against number or string
 			const numKey = isIndex(skey) ? parseInt(skey, 10) : skey;
 			const ki = this._keys.indexOf(numKey);
@@ -373,7 +373,7 @@ export class NANOS {
 	 * @returns 
 	 */
 	#getOpts (optParam, defKey, defOpts = OPTS_EMPTY) {
-		// #4: fast-path for the common no-options case — zero allocation
+		// #4: fast-path for the common no-options case - zero allocation
 		if (optParam === undefined) return defOpts;
 		const optObj = isPlainObject(optParam) ? optParam : { [defKey]: optParam };
 		return { ...defOpts, ...optObj };
@@ -856,7 +856,7 @@ export class NANOS {
 			if (to >= this._next) this._next += by;
 			for (let k = from; k < to; ++k) move(k, by);
 		}
-		// #7: _keys stores numbers for index keys — in-place update, no parseInt needed
+		// #7: _keys stores numbers for index keys - in-place update, no parseInt needed
 		if (by) {
 			for (let i = 0; i < this._keys.length; i++) {
 				const k = this._keys[i];
@@ -958,7 +958,7 @@ export class NANOS {
 				if (ind === false || ind >= this._next) this._keys.push(storeKey);
 				else {
 					// Latest placement maintaining ascending index order
-					// #3: insertion hint cache — O(1) amortized for sequential patterns
+					// #3: insertion hint cache - O(1) amortized for sequential patterns
 					// #7: _keys stores numbers for index keys
 					let ki;
 					const hint = this._insertHint;
@@ -1154,10 +1154,10 @@ export class NANOS {
 	 */
 	toSLID ({ compact = false, redact = false } = {}) {
 		this._rio?.depend();
-		const escape = (str) => escapeJSString(str).replace(/\)]/g, ')\\]');
-		// Inline serializer for plain objects/arrays/Maps/Sets — avoids allocating
+		const escape = (str) => escapeJSString(str).replaceAll(')]', ')\\]');
+		// Inline serializer for plain objects/arrays/Maps/Sets - avoids allocating
 		// a full NANOS instance just to immediately serialize it.
-		// #6: squishPush — inline squishing helper: appends item to items[], inserting
+		// #6: squishPush - inline squishing helper: appends item to items[], inserting
 		// a space separator when compact mode requires it (avoids a second pass).
 		// In non-compact mode, items[] contains only content strings; join(' ') adds spaces.
 		// In compact mode, items[] contains content and space strings; join('') is correct.
@@ -1235,7 +1235,7 @@ export class NANOS {
 			// Hoist redaction flags to avoid per-key method call overhead
 			const redactIndexed = redact && !!node._redacted?.[0];
 			const items = [];
-			// Iterate _keys/_storage directly — avoids entries() generator overhead
+			// Iterate _keys/_storage directly - avoids entries() generator overhead
 			// (closures, _rio?.depend() call, compact/raw option processing)
 			const storage = node._storage;
 			for (const k of node._keys) {
@@ -1264,7 +1264,7 @@ export class NANOS {
 			}
 			return joinItems(items);
 		};
-		return '[(' + itemsToStr(this).replace(/\)\]/g, ')\\]') + ')]';
+		return '[(' + itemsToStr(this).replaceAll(')]', ')\\]') + ')]';
 	}
 
 	static toSLID (value, options = {}) {
@@ -1306,12 +1306,12 @@ export class NANOS {
 	 * @param {boolean} [opts.raw] Yields raw, rather than final, reactive values
 	 * @yields {*}
 	 */
-	// #8: direct _keys loop — eliminates double indirection via indexKeys() + atRaw()
+	// #8: direct _keys loop - eliminates double indirection via indexKeys() + atRaw()
 	*values (opts = undefined) {
 		this._rio?.depend();
 		const toFinal = (opts?.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
 		const storage = this._storage;
-		// #7: _keys stores numbers for index keys — typeof check replaces isIndex() call
+		// #7: _keys stores numbers for index keys - typeof check replaces isIndex() call
 		// storage[k] uses implicit numeric-to-string coercion (native, faster than String(k))
 		for (const k of this._keys) {
 			if (typeof k === 'number') yield toFinal(storage[k]);
