@@ -971,4 +971,26 @@ Deno.test("SLID and QJSON", async (t) => {
 		const n2 = parseSLID(slid);
 		assertEquals(n.toJSON(), n2.toJSON());
 	});
+
+	await t.step("parseSLID values starting with '/' are not dropped", () => {
+		// Regression test: the comment-skipping optimization incorrectly dropped
+		// any token starting with '/' (charCode 47), including valid path values.
+		const input = "[(noSSL=@t httpPort=0 httpsPort=0 hostname=localhost logLevel=debug routes=[[path=/hello app=../examples/apps/hello-world.esm.js pool=fast] [path=/bye app=../examples/apps/hello-world.esm.js pool=fast]] pools=[fast=[minProcs=1 maxProcs=1 maxWorkers=2 reqTimeout=5]])]";
+		const n = parseSLID(input);
+		const routes = n.at('routes');
+		assert(routes instanceof NANOS);
+		assertEquals(routes.size, 2);
+		const route0 = routes.at(0);
+		assert(route0 instanceof NANOS);
+		assertEquals(route0.at('path'), '/hello');
+		assertEquals(route0.at('app'), '../examples/apps/hello-world.esm.js');
+		assertEquals(route0.at('pool'), 'fast');
+		const route1 = routes.at(1);
+		assert(route1 instanceof NANOS);
+		assertEquals(route1.at('path'), '/bye');
+		assertEquals(route1.at('app'), '../examples/apps/hello-world.esm.js');
+		assertEquals(route1.at('pool'), 'fast');
+		// Round-trip should reproduce the original
+		assertEquals(n.toSLID(), input);
+	});
 });
