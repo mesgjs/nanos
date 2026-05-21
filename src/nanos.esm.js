@@ -621,7 +621,15 @@ export class NANOS {
 		while ((m = slidLexRE.exec(src)) !== null) {
 			const t = m[0];
 			// Skip whitespace and comments
-			if (t.charCodeAt(0) <= 32 || t.startsWith('/*')) continue;
+			switch (t[0]) {
+			case ' ':
+			case '\t':
+			case '\r':
+			case '\n':
+				continue;
+			case '/':
+				if (t[1] === '*') continue;
+			}
 			tokens.push(t);
 		}
 		// Use an integer cursor instead of Array.shift() to avoid O(n²) behaviour.
