@@ -1237,6 +1237,7 @@ export class NANOS {
 			if (value instanceof NANOS) return '[' + itemsToStr(value) + ']';
 			return '@u/*??*/';
 		};
+		const finalValueToStr = this._rio ? ((value) => valueToStr(this.#final(value))) : valueToStr;
 		const itemsToStr = (node) => {
 			let expInd = 0;						// Expected next index
 			if (redact && node._redacted === true) return ((redact === 'comment') ? '/*???*/' : '');
@@ -1253,13 +1254,13 @@ export class NANOS {
 						if (redact === 'comment') squishPush(items, '/*?*/');
 						continue;
 					}
-					squishPush(items, ((k === expInd) ? '' : `${k}=`) + valueToStr(storage[k]));
+					squishPush(items, ((k === expInd) ? '' : `${k}=`) + finalValueToStr(storage[k]));
 					expInd = k + 1;
 				} else {
 					if (redact && node._redacted?.[k]) {
 						if (redact === 'comment') squishPush(items, '/*?=?*/');
 					} else {
-						squishPush(items, valueToStr(k) + '=' + valueToStr(storage[k]));
+						squishPush(items, valueToStr(k) + '=' + finalValueToStr(storage[k]));
 					}
 				}
 			}

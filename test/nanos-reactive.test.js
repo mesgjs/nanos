@@ -1,3 +1,14 @@
+/**
+ * NANOS Structural Reactivity Tests
+ *
+ * This file tests reactivity triggered by *structural* changes to NANOS instances:
+ * key additions, deletions, reordering, locking, redaction flags, etc.
+ *
+ * ⚠️  WARNING: Tests for *value-level* reactivity (reactive values stored inside
+ * NANOS, toSLID output reflecting final vs. raw values, etc.) do NOT belong here.
+ * Those tests live in nanos-reactive-value.test.js.
+ */
+
 import { reactive } from '@reactive';
 import { NANOS } from '../src/nanos.esm.js';
 import {

@@ -400,9 +400,10 @@ Generates a SLID (Static List Data) formatted string.
 * **Note**: If the `next` value leaves a gap beyond the last item, the SLID string will encode it using `@e` (empty) or `<index>=@e` (depending on the size of the gap), such that parsing it results in the same `next` as the original.
   * `new NANOS(['a', , ,]).toSLID();   // [(a @e @e)] (1 and 2 empty, .next = 3)`
   * `new NANOS(['b', , , ,]).toSLID(); // [(b 3=@e)] (1 thru 3 empty, .next = 4)`
+* **Reactive behavior**: `toSLID()` is not itself reactive, but when called inside a reactive computation it registers a dependency via the RIO. The computation will re-run whenever the NANOS changes structurally (key additions/deletions) or, with an extended RIO, whenever any stored value changes. Values are always serialized as their *final* (resolved) form — reactive wrappers are never exposed in the output.
 
 ### `NANOS.toSLID(value, { options })` (static)
-Generatea a SLID-formatted string for `value`.
+Generates a SLID-formatted string for `value`.
 *   **Returns**: The SLID string.
 
 ### `.toString(options)`

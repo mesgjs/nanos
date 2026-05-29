@@ -1,5 +1,17 @@
+/**
+ * NANOS Value Reactivity Tests
+ *
+ * This file tests reactivity driven by *value-level* changes inside NANOS instances:
+ * reactive values stored at keys, toSLID output reflecting final (resolved) values,
+ * and the extended RIO (get/isReactive/onSet) that enables per-value reactivity.
+ *
+ * ⚠️  WARNING: Tests for *structural* reactivity (key additions/deletions, size,
+ * locking, etc.) do NOT belong here.
+ * Those tests live in nanos-reactive.test.js.
+ */
+
 import { reactive } from '@reactive';
-import { NANOS } from '../src/nanos.esm.js';
+import { NANOS, toSLID } from '../src/nanos.esm.js';
 import {
     assertEquals,
 } from 'https://deno.land/std@0.224.0/assert/mod.ts';
@@ -589,4 +601,193 @@ Deno.test('slice() with raw option', async () => {
     s2.set(0, 'modified');
     await reactive.wait();
     assertEquals(slicedVal, 'modified');
+});
+
+Deno.test('toSLID() Displays Final Values (Not Reactive Internals)', async () => {
+    // With extRio + autoReactive, values stored in NANOS are reactive wrappers.
+    // toSLID() must serialize the final (resolved) values, not the reactive objects.
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set(0, 'alpha');
+    n.set('key', 'beta');
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = n.toSLID();
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    // Final values should appear, not reactive object representations
+    assertEquals(slid, "[(alpha key=beta)]");
+
+    n.set(0, 'gamma');
+    await reactive.wait();
+    assertEquals(slid, "[(gamma key=beta)]");
+
+    n.set('key', 'delta');
+    await reactive.wait();
+    assertEquals(slid, "[(gamma key=delta)]");
+});
+
+Deno.test('toSLID() Value-Change Reactivity', async () => {
+    // Changing a value reactively (via extRio) should cause toSLID() to update.
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set(0, 1);
+    n.set(1, 2);
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = n.toSLID();
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slid, '[(1 2)]');
+
+    n.set(0, 10);
+    await reactive.wait();
+    assertEquals(slid, '[(10 2)]');
+
+    n.set(1, 20);
+    await reactive.wait();
+    assertEquals(slid, '[(10 20)]');
+
+    n.push(3);
+    await reactive.wait();
+    assertEquals(slid, '[(10 20 3)]');
+
+    n.pop();
+    await reactive.wait();
+    assertEquals(slid, '[(10 20)]');
+});
+
+Deno.test('toSLID() Named Key Value-Change Reactivity', async () => {
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set('x', 1);
+    n.set('y', 2);
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = n.toSLID();
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slid, '[(x=1 y=2)]');
+
+    n.set('x', 10);
+    await reactive.wait();
+    assertEquals(slid, '[(x=10 y=2)]');
+
+    n.set('y', 20);
+    await reactive.wait();
+    assertEquals(slid, '[(x=10 y=20)]');
+});
+
+Deno.test('toSLID() with Nested NANOS and Value Reactivity', async () => {
+    // Inner NANOS uses extRio so its values are reactive too.
+    const inner = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    inner.set(0, 'x');
+    inner.set(1, 'y');
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set('inner', inner);
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = n.toSLID();
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slid, '[(inner=[x y])]');
+
+    inner.set(0, 'X');
+    await reactive.wait();
+    assertEquals(slid, '[(inner=[X y])]');
+
+    inner.set(1, 'Y');
+    await reactive.wait();
+    assertEquals(slid, '[(inner=[X Y])]');
+});
+
+Deno.test('toSLID() with compact Option and Value Reactivity', async () => {
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set(0, 'a');
+    n.set(1, 'b');
+    n.set('name', 'c');
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = n.toSLID({ compact: true });
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slid, "[(a b name=c)]");
+
+    n.set(0, 'A');
+    await reactive.wait();
+    assertEquals(slid, "[(A b name=c)]");
+
+    n.set('name', 'C');
+    await reactive.wait();
+    assertEquals(slid, "[(A b name=C)]");
+});
+
+Deno.test('toSLID() with redact Option and Value Reactivity', async () => {
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set(0, 'public');
+    n.set('secret', 'hidden');
+    n.set('visible', 'shown');
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = n.toSLID({ redact: true });
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slid, "[(public secret=hidden visible=shown)]");
+
+    n.redact('secret');
+    await reactive.wait();
+    assertEquals(slid, "[(public visible=shown)]");
+
+    n.set('visible', 'updated');
+    await reactive.wait();
+    assertEquals(slid, "[(public visible=updated)]");
+});
+
+Deno.test('NANOS.toSLID() Static Helper Displays Final Values', async () => {
+    // The static toSLID() helper should also resolve reactive values via the RIO.
+    const n = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    n.set(0, 'hello');
+    n.set('k', 'world');
+    let slid;
+
+    reactive({
+        def: () => {
+            slid = toSLID(n);
+        },
+        eager: true
+    });
+
+    await reactive.wait();
+    assertEquals(slid, "[(hello k=world)]");
+
+    n.set(0, 'hi');
+    await reactive.wait();
+    assertEquals(slid, "[(hi k=world)]");
 });
