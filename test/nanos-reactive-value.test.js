@@ -791,3 +791,30 @@ Deno.test('NANOS.toSLID() Static Helper Displays Final Values', async () => {
     await reactive.wait();
     assertEquals(slid, "[(hi k=world)]");
 });
+
+Deno.test('toSLID() of Non-Reactive NANOS with Nested Reactive NANOS Shows Final Values', async () => {
+    // The outer NANOS has no RIO (non-reactive). The inner NANOS uses extRio
+    // so its values are reactive wrappers. When toSLID() is called on the outer
+    // NANOS, it must serialize the inner NANOS using its own RIO to resolve
+    // reactive values — the output must show final values, not reactive objects.
+    const inner = new NANOS().setRIO(extRio()).setOptions({ autoReactive: true });
+    inner.set(0, 'x');
+    inner.set('name', 'y');
+
+    // Outer NANOS has no RIO — it is non-reactive
+    const outer = new NANOS();
+    outer.set('inner', inner);
+
+    // toSLID() on the non-reactive outer should still resolve inner's reactive values
+    const slid = outer.toSLID();
+    assertEquals(slid, '[(inner=[x name=y])]');
+
+    // Mutate the inner reactive NANOS and verify toSLID() reflects the new final values
+    inner.set(0, 'X');
+    await reactive.wait();
+    assertEquals(outer.toSLID(), '[(inner=[X name=y])]');
+
+    inner.set('name', 'Y');
+    await reactive.wait();
+    assertEquals(outer.toSLID(), '[(inner=[X name=Y])]');
+});

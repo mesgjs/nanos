@@ -393,9 +393,12 @@ Returns a new, reversed copy of the instance.
 Returns a JSON-representable object for `JSON.stringify()`.
 *   **Returns**: An object with `type`, `next`, and `pairs` properties.
 
-### `.toSLID({ compact, redact })`
+### `.toSLID({ compact, redact, inner })`
 Generates a SLID (Static List Data) formatted string.
-* **`options`**: An object with `compact` and `redact` booleans.
+* **`options`**: An object with `compact`, `redact`, and `inner` booleans.
+  * `compact`: Generate more-compact (but less visually-scannable) output
+  * `redact`: Show placeholders instead of actual values where redacted
+  * `inner`: Wrap the top-most level in inner-style `[` and `]` list markers instead of `[(` and `)]` SLID boundary markers
 * **Returns**: The SLID string.
 * **Note**: If the `next` value leaves a gap beyond the last item, the SLID string will encode it using `@e` (empty) or `<index>=@e` (depending on the size of the gap), such that parsing it results in the same `next` as the original.
   * `new NANOS(['a', , ,]).toSLID();   // [(a @e @e)] (1 and 2 empty, .next = 3)`

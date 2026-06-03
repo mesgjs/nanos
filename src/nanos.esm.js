@@ -1160,7 +1160,7 @@ export class NANOS {
 	 * @param {{compact?: boolean, redact?: boolean}} [options]
 	 * @returns {string}
 	 */
-	toSLID ({ compact = false, redact = false } = {}) {
+	toSLID ({ compact = false, redact = false, inner = false } = {}) {
 		this._rio?.depend();
 		const escape = (str) => escapeJSString(str).replaceAll(')]', ')\\]');
 		// Inline serializer for plain objects/arrays/Maps/Sets - avoids allocating
@@ -1229,12 +1229,11 @@ export class NANOS {
 			case 'bigint': return value.toString() + 'n';
 			case 'number': return value.toString();
 			case 'string':
-				// #10: word-literal regex hoisted to module scope as slidWordRE
 				if (slidWordRE.test(value) && value.indexOf('/*') < 0) return value;
 				return "'" + escape(value) + "'";
 			}
 			if (isPlainObject(value) || Array.isArray(value) || value instanceof Map || value instanceof Set) return containerToStr(value);
-			if (value instanceof NANOS) return '[' + itemsToStr(value) + ']';
+			if (value instanceof NANOS) return value.toSLID({ compact, redact, inner: true });
 			return '@u/*??*/';
 		};
 		const finalValueToStr = this._rio ? ((value) => valueToStr(this.#final(value))) : valueToStr;
@@ -1273,7 +1272,7 @@ export class NANOS {
 			}
 			return joinItems(items);
 		};
-		return '[(' + itemsToStr(this).replaceAll(')]', ')\\]') + ')]';
+		return (inner ? '[' : '[(') + itemsToStr(this).replaceAll(')]', ')\\]') + (inner ? ']' : ')]');
 	}
 
 	static toSLID (value, options = {}) {
