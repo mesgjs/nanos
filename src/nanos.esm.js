@@ -94,14 +94,12 @@ export class NANOS {
 		opts = this.#getOpts(opts, 'default');
 		if (Array.isArray(key)) {
 			// deno-lint-ignore no-this-alias
-			let next = this;
+			let [next, finalNext] = [this, this];
 			for (const curKey of key) {
-				next = this.#final(next);
-				if (!(next instanceof NANOS) || !next.has(curKey)) return opts.default;
-				next = next.atRaw(curKey);
+				if (!(finalNext instanceof NANOS) || !finalNext.has(curKey)) return opts.default;
+				[next, finalNext] = [finalNext.atRaw(curKey), finalNext.at(curKey)];
 			}
-			if (!opts.raw && this._rio?.get) next = this.#final(next);
-			return next;
+			return opts.raw ? next : finalNext;
 		}
 		this._rio?.depend();
 		key = this.#wrapKey(key);
@@ -997,19 +995,6 @@ export class NANOS {
 	}
 
 	/**
-	 * Set a raw value, bypassing any RIO `onSet` handler.
-	 * @param {string|number} [key]
-	 * @param {*} value
-	 * @param {object} [opts] Options object
-	 * @param {boolean} [opts.insert=false] Add to beginning instead of end
-	 * @returns
-	 */
-	setRaw (key, value, opts = undefined) {
-		opts = this.#getOpts(opts, 'insert', OPTS_RAW);
-		return this.set(key, value, opts);
-	}
-
-	/**
 	 * Determine if a value is set-like (value, ...).
 	 * @param {*} value
 	 * @returns {boolean}
@@ -1031,6 +1016,19 @@ export class NANOS {
 	setOpts (options) {
 		Object.assign(this._options, options);
 		return this;
+	}
+
+	/**
+	 * Set a raw value, bypassing any RIO `onSet` handler.
+	 * @param {string|number} [key]
+	 * @param {*} value
+	 * @param {object} [opts] Options object
+	 * @param {boolean} [opts.insert=false] Add to beginning instead of end
+	 * @returns
+	 */
+	setRaw (key, value, opts = undefined) {
+		opts = this.#getOpts(opts, 'insert', OPTS_RAW);
+		return this.set(key, value, opts);
 	}
 
 	/**
@@ -1062,15 +1060,6 @@ export class NANOS {
 	}
 
 	/**
-	 * Size of list (# of keys / indexes).
-	 * @returns {number}
-	 */
-	get size () {
-		this._rio?.depend();
-		return this._keys.length;
-	}
-
-	/**
 	 * Return a similarly-configured new NANOS.
 	 * @param {...*} items
 	 * @returns {NANOS}
@@ -1081,6 +1070,15 @@ export class NANOS {
 		nn.rio = this._rio?.create();
 		if (items.length) nn.push(...items);
 		return nn;
+	}
+
+	/**
+	 * Size of list (# of keys / indexes).
+	 * @returns {number}
+	 */
+	get size () {
+		this._rio?.depend();
+		return this._keys.length;
 	}
 
 	/**
@@ -1110,6 +1108,16 @@ export class NANOS {
 	get storage () {
 		this._rio?.depend();
 		return this._storage;
+	}
+
+	/**
+	 * Returns a JSON-representable object.
+	 * Might be the best we can do.
+	 * @returns {{type: string, next: number, pairs: Array<*>}}
+	 */
+	toJSON () {
+		this._rio?.depend();
+		return {type:'@NANOS@', next: this._next, pairs: this.pairs(true)};
 	}
 
 	/**
@@ -1143,16 +1151,6 @@ export class NANOS {
 	toReversed () {
 		this._rio?.depend();
 		return this.similar().from(this).reverse();
-	}
-
-	/**
-	 * Returns a JSON-representable object.
-	 * Might be the best we can do.
-	 * @returns {{type: string, next: number, pairs: Array<*>}}
-	 */
-	toJSON () {
-		this._rio?.depend();
-		return {type:'@NANOS@', next: this._next, pairs: this.pairs(true)};
 	}
 
 	/**
