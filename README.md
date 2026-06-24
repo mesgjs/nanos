@@ -129,7 +129,8 @@ Signals a dependency for reactive interfaces (like Svelte or Vue).
 
 ### `.entries([opts])`
 Returns an iterator that yields `[key, value]` pairs.
-*   **`opts.compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **`opts.num`**: If `true`, index keys are returned as numbers instead of strings. Passing a bare `true` (boolean) is equivalent to `{ num: true }`.
+*   **`opts.compact`**: Alias for `opts.num`.
 *   **`opts.raw`**: If `true`, yields raw (potentially reactive) values.
 *   **Returns**: An iterator for all entries.
 
@@ -141,18 +142,21 @@ Creates a new NANOS instance with all elements that pass the test implemented by
 ### `.find(f, [opts])`
 Returns the first `[key, value]` pair for which the testing function `f` returns true.
 *   **`f(value, key, nanos)`**: The testing function.
+*   **`opts.num`**: If `true`, the index key in the returned pair is a number instead of a string.
 *   **`opts.raw`**: If `true`, passes raw (potentially reactive) values to the testing function.
 *   **Returns**: The `[key, value]` pair, or `undefined`.
 
 ### `.findLast(f, [opts])`
 Returns the last `[key, value]` pair for which the testing function `f` returns true.
 *   **`f(value, key, nanos)`**: The testing function.
+*   **`opts.num`**: If `true`, the index key in the returned pair is a number instead of a string.
 *   **`opts.raw`**: If `true`, passes raw (potentially reactive) values to the testing function.
 *   **Returns**: The `[key, value]` pair, or `undefined`.
 
 ### `.forEach(f, [opts])`
 Executes a provided function once for each key/value pair.
 *   **`f(value, key, nanos)`**: The function to execute.
+*   **`opts.num`**: If `true`, index keys passed to `f` are numbers instead of strings.
 *   **`opts.raw`**: If `true`, passes raw (potentially reactive) values to the function.
 
 ### `.freeze()`
@@ -180,13 +184,15 @@ Checks if a value exists in the instance.
 *   **`value`**: The value to search for.
 *   **Returns**: `true` if the value exists, otherwise `false`.
 
-### `.indexEntries([compact=false])`
+### `.indexEntries([compact=false, num=false])`
 Returns an iterator that yields `[key, value]` pairs for indexed entries only.
-*   **`compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **`compact`**: Alias for `num`
+*   **`num`**: If `true`, index keys are returned as numbers instead of strings.
 *   **Returns**: An iterator for indexed entries.
 
-### `.indexKeys()`
+### `.indexKeys([num])`
 Returns an iterator that yields the keys of indexed entries only.
+*   **`num`**: If `true`, yields numeric keys instead of strings.
 *   **Returns**: An iterator for index keys.
 
 ### `.isLocked([key])`
@@ -199,13 +205,15 @@ Checks if a specific key is redacted.
 *   **`key`**: The key to check.
 *   **Returns**: `true` if redacted, otherwise `false`.
 
-### `.keyOf(value)`
+### `.keyOf(value, [opts])`
 Returns the first key associated with a given value.
 *   **`value`**: The value to locate.
+*   **`opts.num`**: If `true`, returns a numeric key for indexed entries instead of a string.
 *   **Returns**: The key, or `undefined` if not found.
 
-### `.keys()`
+### `.keys([num])`
 Returns an iterator that yields the keys of the instance in insertion order.
+*   **`num`**: If `true`, index keys are yielded as numbers instead of strings.
 
 ### `.lock(...keys)`
 Locks specific values by key, making them read-only. Does not prevent adding or removing other keys.
@@ -221,9 +229,10 @@ Locks all current values.
 Locks the key set, preventing any additions or deletions of keys.
 *   **Returns**: `this`.
 
-### `.lastKeyOf(value)`
+### `.lastKeyOf(value, [opts])`
 Returns the last key associated with a given value.
 *   **`value`**: The value to locate.
+*   **`opts.num`**: If `true`, returns a numeric key for indexed entries instead of a string.
 *   **Returns**: The key, or `undefined` if not found.
 
 ### `.namedEntries()`
@@ -237,9 +246,9 @@ Returns an iterator that yields the keys of named entries only.
 ### `.next` (getter)
 Returns the next available numerical index (equivalent to `array.length`).
 
-### `.pairs([compact=false])`
+### `.pairs([opts])`
 Returns a flat array of `[key1, value1, key2, value2, ...]`.
-*   **`compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **`opts.num`**: If `true`, index keys are returned as numbers instead of strings. Passing a bare `true` (boolean) is equivalent to `{ num: true }`.
 *   **Returns**: A flat array of key-value pairs.
 
 ### `NANOS.parseQJSON(str)` (static)
@@ -299,9 +308,11 @@ Hides specified values from `toString()` or `toSLID()` output.
 Reverses the order of all elements *in place*.
 *   **Returns**: `this`.
 
-### `.reverseEntries([compact=false])`
+### `.reverseEntries([opts])`
 Returns an iterator that yields `[key, value]` pairs in reverse (last-to-first) key order.
-*   **`compact`**: If `true`, index keys are returned as numbers instead of strings.
+*   **`opts.num`**: If `true`, index keys are returned as numbers instead of strings. Passing a bare `true` (boolean) is equivalent to `{ num: true }`.
+*   **`opts.compact`**: Alias for `opts.num`.
+*   **`opts.raw`**: If `true`, yields raw (potentially reactive) values.
 *   **Returns**: An iterator for all entries in reverse order.
 
 ### `.rio` (getter/setter)

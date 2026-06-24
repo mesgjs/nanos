@@ -93,7 +93,6 @@ export class NANOS {
 	at (key, opts = undefined) {
 		opts = this.#getOpts(opts, 'default');
 		if (Array.isArray(key)) {
-			// deno-lint-ignore no-this-alias
 			let [next, finalNext] = [this, this];
 			for (const curKey of key) {
 				if (!(finalNext instanceof NANOS) || !finalNext.has(curKey)) return opts.default;
@@ -134,7 +133,7 @@ export class NANOS {
 		this._keys = [];
 		this._storage = {};
 		this._lockInd = undefined;
-		this._insertHint = undefined;	// #3: invalidate insertion hint cache
+		this._insertHint = undefined;
 		delete this._redacted;
 		this._rio?.changed();
 		return this;
@@ -162,18 +161,20 @@ export class NANOS {
 	 * @param {boolean} [opts.raw=false] Return the raw, rather than final, deleted value
 	 * @returns {*}
 	 */
-	delete (key, opts = undefined) {
+	delete (key, opts) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "delete" after locking');
+
 		const skey = String(key);
 		const ret = this._storage[skey];
+
 		if (Object.hasOwn(this._storage, skey)) {
 			delete this._storage[skey];
-			// #2: indexOf + splice instead of filter() - in-place, no new array
-			// #7: _keys stores numbers for index keys; compare against number or string
+
 			const numKey = isIndex(skey) ? parseInt(skey, 10) : skey;
 			const ki = this._keys.indexOf(numKey);
+
 			if (ki !== -1) this._keys.splice(ki, 1);
-			this._insertHint = undefined;	// #3: invalidate insertion hint cache
+			this._insertHint = undefined;
 			this._rio?.changed();
 		}
 		return (opts?.raw ? ret : this.#final(ret));
@@ -187,18 +188,19 @@ export class NANOS {
 	 * Compact mode uses numeric index keys instead of the standard strings
 	 * (e.g. 0 instead of '0').
 	 * @param {object} [opts] Options object
-	 * @param {boolean} [opts.compact=false] Return numeric index keys instead of strings
+	 * @param {boolean} [opts.compact=false] Alias for opts.num
+	 * @param {boolean} [opts.num=false] Return numeric index keys instead of strings
 	 * @param {boolean} [opts.raw=false] Return raw, rather than final, reactive values
 	 * @yields {[string|number, *]}
 	 */
-	*entries (opts = undefined) {
-		opts = this.#getOpts(opts, 'compact');
+	*entries (opts) {
+		opts = this.#getOpts(opts, 'num');
 		this._rio?.depend();
-		const storage = this._storage;
-		// #7: _keys stores numbers for index keys; compact mode returns them as-is,
-		// non-compact mode converts numbers to strings
-		const ik = opts.compact ? ((k) => k) : ((k) => typeof k === 'number' ? String(k) : k);
+
+		const storage = this._storage, num = opts.num || opts.compact;
+		const ik = num ? ((k) => k) : ((k) => typeof k === 'number' ? String(k) : k);
 		const fv = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
+
 		for (const k of this._keys) yield [ ik(k), fv(storage[k]) ];
 	}
 
@@ -208,9 +210,11 @@ export class NANOS {
 	 * @param {object} [opts] Options object, passed to entries()
 	 * @returns {NANOS}
 	 */
-	filter (f, opts = undefined) {
+	filter (f, opts) {
 		this._rio?.depend();
+
 		const result = this.similar();
+
 		result.fromEntries([...this.entries(opts)].filter((kv) => f(kv[1], kv[0], this)));
 		return result;
 	}
@@ -224,18 +228,20 @@ export class NANOS {
 	 * Returns first [key, value] where f(value, key) is true; cf find, findIndex.
 	 * @param {function(*, string|number, NANOS): boolean} f
 	 * @param {object} [opts] Options object
+	 * @param {boolean} [opts.num=false] Return numeric index key
 	 * @param {boolean} [opts.raw=false] Pass the filter raw, rather than final, reactive values
 	 * @returns {[string|number, *]|undefined}
 	 */
-	find (f, opts = undefined) {
+	find (f, opts) {
 		this._rio?.depend();
-		const s = this._storage;
-		const toFinal = (opts?.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
-		// #7: _keys stores numbers for index keys; expose as strings to callers
+
+		const s = this._storage, num = opts?.num, raw = opts?.raw || !this._rio?.get;
+
 		for (const k of this._keys) {
-			const sk = typeof k === 'number' ? String(k) : k;
-			const final = toFinal(s[k]);
-			if (f(final, sk, this)) return [sk, final];
+			const nsk = (!num && typeof k === 'number') ? String(k) : k;
+			const final = raw? s[k] : this.#final(s[k]);
+
+			if (f(final, nsk, this)) return [nsk, final];
 		}
 	}
 
@@ -243,18 +249,20 @@ export class NANOS {
 	 * Returns last [key, value] where f(value, key) is true; cf findLast, findLastIndex.
 	 * @param {function(*, string|number, NANOS): boolean} f
 	 * @param {object} [opts] Options object
+	 * @param {boolean} [opts.num=false] Use numeric index keys instead of strings
 	 * @param {boolean} [opts.raw=false] Pass the filter raw, rather than final, reactive values
 	 * @returns {[string|number, *]|undefined}
 	 */
-	findLast (f, opts = undefined) {
+	findLast (f, opts) {
 		this._rio?.depend();
-		const s = this._storage;
-		const toFinal = (opts?.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
-		// #7: _keys stores numbers for index keys; expose as strings to callers
+
+		const s = this._storage, num = opts?.num, raw = opts?.raw || !this._rio?.get;
+
 		for (const k of this._keys.toReversed()) {
-			const sk = typeof k === 'number' ? String(k) : k;
-			const final = toFinal(s[k]);
-			if (f(final, sk, this)) return [sk, final];
+			const nsk = (!num && typeof k === 'number') ? String(k) : k;
+			const final = raw ? s[k] : this.#final(s[k]);
+
+			if (f(final, nsk, this)) return [nsk, final];
 		}
 	}
 
@@ -262,17 +270,19 @@ export class NANOS {
 	 * Executes a function for each element.
 	 * @param {function(*, string|number, NANOS): void} f
 	 * @param {object} [opts] Options object
+	 * @param {boolean} [opts.num=false] Use numeric index keys instead of strings
 	 * @param {boolean} [opts.raw=false] Pass the filter raw, rather than final, reactive values
 	 */
-	forEach (f, opts = undefined) {
+	forEach (f, opts) {
 		this._rio?.depend();
-		const storage = this._storage;
-		const toFinal = (opts?.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
-		// #7: _keys stores numbers for index keys; expose as strings to callers
+
+		const storage = this._storage, num = opts?.num, raw = opts?.raw || !this._rio?.get;
+
 		for (const k of this._keys) {
-			const sk = typeof k === 'number' ? String(k) : k;
-			const final = toFinal(storage[k]);
-			f(final, sk, this);
+			const nsk = (!num && typeof k === 'number') ? String(k) : k;
+			const final = raw ? storage[k] : this.#final(storage[k]);
+
+			f(final, nsk, this);
 		}
 	}
 
@@ -298,13 +308,16 @@ export class NANOS {
 	 * @param {boolean} [opts.deep] Deep-copy instead of shallow
 	 * @param {boolean} [opts.raw] Transfer raw values
 	 */
-	from (source, opts = undefined) {
+	from (source, opts) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "from" after locking');
 		if (!(source instanceof NANOS)) return this;
-		const batch = this._rio?.batch || ((cb) => cb());
+
+		const batch = this._rio?.batch || ((cb) => cb()), raw = opts?.raw;
+
 		batch(() => {
-			for (const kv of source.entries({ raw: opts?.raw })) {
+			for (const kv of source.entries({ raw })) {
 				let [key, value] = kv;
+
 				if (opts?.deep && value instanceof NANOS) {
 					value = this.similar().from(value, opts);
 				}
@@ -371,7 +384,6 @@ export class NANOS {
 	 * @returns 
 	 */
 	#getOpts (optParam, defKey, defOpts = OPTS_EMPTY) {
-		// #4: fast-path for the common no-options case - zero allocation
 		if (optParam === undefined) return defOpts;
 		const optObj = isPlainObject(optParam) ? optParam : { [defKey]: optParam };
 		return { ...defOpts, ...optObj };
@@ -394,31 +406,35 @@ export class NANOS {
 	 * @param {object} [opts] Options object, passed to keyOf/find
 	 * @returns {boolean}
 	 */
-	includes (value, opts = undefined) {
+	includes (value, opts) {
 		return this.keyOf(value, opts) !== undefined;
 	}
 
 	/**
 	 * Iterates over indexed entries.
 	 * @param {object} [opts] Options object, passed to entries
-	 * @param {boolean} [opts.compact=false] Return number indexes rather than strings
+	 * @param {boolean} [opts.compact=false] Alias for opts.num
+	 * @param {boolean} [opts.num=false] Return number indexes rather than strings
 	 * @param {boolean} [opts.raw=false] Return raw, rather than final, reactive values
 	 * @yields {[string|number, *]}
 	 */
-	*indexEntries (opts = undefined) {
-		opts = this.#getOpts(opts, 'compact');
-		// #7: in compact mode, numeric keys are already numbers; in non-compact, filter by typeof
+	*indexEntries (opts) {
+		opts = this.#getOpts(opts, 'num');
 		for (const kv of this.entries(opts)) if (typeof kv[0] === 'number' || isIndex(kv[0])) yield kv;
 	}
 
 	/**
 	 * Iterates over index keys.
+	 * @param {boolean} [num=false] - Return numeric keys
 	 * @yields {string}
 	 */
-	*indexKeys () {
+	*indexKeys (num) {
 		this._rio?.depend();
-		// #7: _keys stores numbers for index keys; yield as strings for public API
-		for (const k of this._keys) if (typeof k === 'number') yield String(k);
+		if (num) for (const k of this._keys) {
+			if (typeof k === 'number') yield k;
+		} else for (const k of this._keys) {
+			if (typeof k === 'number') yield String(k);
+		}
 	}
 
 	/**
@@ -453,15 +469,16 @@ export class NANOS {
 	 * @param {object} [opts] Options object, passed to find
 	 * @returns {string|number|undefined}
 	 */
-	keyOf (value, opts = undefined) { return this.find((v) => v === value, opts)?.[0]; }
+	keyOf (value, opts) { return this.find((v) => v === value, opts)?.[0]; }
 
 	/**
 	 * Returns an iterator for the keys.
-	 * @returns {Iterator<string>}
+	 * @param {boolean} [num] - Return numeric index keys instead of strings
+	 * @returns {Iterator<number|string>}
 	 */
-	keys () {
+	keys (num) {
 		this._rio?.depend();
-		// #7: _keys stores numbers for index keys; public API returns strings
+		if (num) return this._keys.values();
 		return this._keys.map((k) => typeof k === 'number' ? String(k) : k).values();
 	}
 
@@ -471,7 +488,7 @@ export class NANOS {
 	 * @param {object} [opts] Options object, passed to findLast
 	 * @returns {string|number|undefined}
 	 */
-	lastKeyOf (value, opts = undefined) {
+	lastKeyOf (value, opts) {
 		return this.findLast((v) => v === value, opts)?.[0];
 	}
 
@@ -499,7 +516,7 @@ export class NANOS {
 	 * @param {boolean} [andNew=false] Also lock new keys' values as they are added
 	 * @returns {this}
 	 */
-	lockAll (andNew = false) {
+	lockAll (andNew) {
 		if (andNew) this._lockNew = true;
 		this.lock(this._keys);
 		return this;
@@ -529,7 +546,7 @@ export class NANOS {
 	 * @param {object} [opts] Options block, passed to entries
 	 * @yields {[string, *]}
 	 */
-	*namedEntries (opts = undefined) {
+	*namedEntries (opts) {
 		// #7: in non-compact mode, index keys are strings; named keys are also strings
 		// but isIndex distinguishes them. In compact mode, index keys are numbers.
 		for (const kv of this.entries(opts)) if (typeof kv[0] !== 'number' && !isIndex(kv[0])) yield kv;
@@ -540,7 +557,7 @@ export class NANOS {
 	 * @param {object} [opts] Options block, passed to entries
 	 * @yields {string}
 	 */
-	*namedKeys (opts = undefined) {
+	*namedKeys (opts) {
 		for (const kv of this.entries({ ...opts, raw: true })) if (typeof kv[0] !== 'number' && !isIndex(kv[0])) yield kv[0];
 	}
 
@@ -576,11 +593,11 @@ export class NANOS {
 
 	/**
 	 * Returns a flat array of key-value pairs.
-	 * @param {boolean} [compact=false]
+	 * @param {boolean} [num=false]
 	 * @returns {Array<*>}
 	 */
-	pairs (opts = undefined) {
-		opts = this.#getOpts(opts, 'compact');
+	pairs (opts) {
+		opts = this.#getOpts(opts, 'num');
 		return [...this.entries(opts)].flat(1);
 	}
 
@@ -607,17 +624,19 @@ export class NANOS {
 	 * @returns {NANOS}
 	 */
 	static parseSLID (str, qj = false) {
-		let match = str.match(/\[\((.*?)\)\]/s);
+		let match = str.match(/\[\((.*?)\)\]/s), m;
+
 		if (!match) throw new SyntaxError('Missing SLID boundary marker(s)');
+
 		// Single-pass tokenization using exec() — avoids O(n) gap-string allocations
 		// from split() and the subsequent filter() pass.
-		const src = match[1].replace(/\)\\\]/g, ')]');
+		const src = match[1].replace(/\)\\\]/g, ')]'), tokens = [];
+
 		match = undefined;
-		const tokens = [];
 		slidLexRE.lastIndex = 0;
-		let m;
 		while ((m = slidLexRE.exec(src)) !== null) {
 			const t = m[0];
+
 			// Skip whitespace and comments
 			switch (t[0]) {
 			case ' ':
@@ -630,12 +649,14 @@ export class NANOS {
 			}
 			tokens.push(t);
 		}
+
 		// Use an integer cursor instead of Array.shift() to avoid O(n²) behaviour.
 		let pos = 0;
 		const peek = (offset = 0) => tokens[pos + offset];
 		const consume = () => tokens[pos++];
 		const parseLeft = () => {		// Can be left of = (numbers, strings)
 			const token = consume();
+
 			if (slidNum.test(token)) {
 				// #9: character switch instead of sequential regex tests
 				const last = token[token.length - 1];
@@ -653,7 +674,7 @@ export class NANOS {
 			if (token === "'" || token === '"') throw new SyntaxError(`Unmatched ${token} in SLID`);
 			if (token[0] !== "'" && token[0] !== '"') return token;
 			return unescapeJSString(token.slice(1, -1));
-		}
+		};
 		const parseRight = () => {		// More that can be right of =
 			if (peek() !== '[') {
 				if (qj) switch (peek()) {
@@ -670,9 +691,10 @@ export class NANOS {
 			}
 			++pos;
 			return parseItems.call(this);		// Nested lists
-		}
+		};
 		const parseItems = () => {
 			const result = new NANOS();
+
 			while (pos < tokens.length && peek() !== ']') {
 				let key;						// Default: positional
 				if (peek(1) === '=') {		// Named value
@@ -693,8 +715,9 @@ export class NANOS {
 			}
 			if (peek() === ']') ++pos;
 			return result;
-		}
+		};
 		const result = parseItems();
+
 		// SLID was malformed if any tokens are left
 		if (pos < tokens.length) throw new SyntaxError('Malformed SLID');
 		return result;
@@ -724,9 +747,11 @@ export class NANOS {
 	pathSet (path, opts = {}) {
 		// Auto-vivifying traversal
 		const avt = (path) => {
-			let leaf = this;
+			let [leaf] = [this];
+
 			for (const key of path) {
 				let val = leaf.at(key);
+
 				if (!(val instanceof NANOS)) {
 					val = leaf.similar();
 					leaf.set(key, val);
@@ -735,21 +760,27 @@ export class NANOS {
 			}
 			return leaf;
 		};
+
 		if (!Array.isArray(path)) path = [path];
 		if (Object.hasOwn(opts, 'to') && path.length) {
 			const { to: value, insert=false, raw=false } = opts;
 			const leaf = avt(path.slice(0, -1)), key = path.slice(-1)[0];
+
 			leaf.set(key, value, { insert, raw });
 			return { base: this, leaf, key, value };
 		}
+
 		const leaf = avt(path), res = { base: this, leaf };
+
 		if (Object.hasOwn(opts, 'first')) {
 			const first = opts.first;
+
 			leaf.unshift(first);
 			res.first = first;
 		}
 		if (Object.hasOwn(opts, 'next')) {
 			const next = opts.next;
+
 			leaf.push(next);
 			res.next = next;
 		}
@@ -762,7 +793,7 @@ export class NANOS {
 	 * @param {boolean} [opts.raw=false] Return the raw, rather than final, popped value
 	 * @returns {*}
 	 */
-	pop (opts = undefined) {
+	pop (opts) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "pop" after locking');
 		if (this._lockInd) throw new TypeError('NANOS: Cannot "pop" after index lock');
 		if (!this._next) return undefined;
@@ -780,6 +811,7 @@ export class NANOS {
 	 */
 	push (...values) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "push" after locking');
+
 		const batch = this._rio?.batch || ((cb) => cb());
 		const options = this._options, transform = options.transform;
 		const pushEntries = (entries, next = 0) => {
@@ -789,6 +821,7 @@ export class NANOS {
 					// Positional: preserve sparseness, potentially transforming
 					// map-ish and set-ish values into nested NANOS
 					const newKey = base + parseInt(key, 10);
+
 					if (transform && (this.#mapish(value) || this.#setish(value))) value = this.similar(value);
 					this.set(newKey, value);
 				} else this.set(key, value);
@@ -862,13 +895,12 @@ export class NANOS {
 			if (to >= this._next) this._next += by;
 			for (let k = from; k < to; ++k) move(k, by);
 		}
-		// #7: _keys stores numbers for index keys - in-place update, no parseInt needed
 		if (by) {
 			for (let i = 0; i < this._keys.length; i++) {
 				const k = this._keys[i];
 				if (typeof k === 'number' && k >= from && k < to) this._keys[i] = k + by;
 			}
-			this._insertHint = undefined;	// #3: invalidate insertion hint cache
+			this._insertHint = undefined;
 		}
 	}
 
@@ -878,12 +910,13 @@ export class NANOS {
 	 */
 	reverse () {
 		if (this._locked) throw new TypeError('NANOS: Cannot "reverse" after locking');
+
 		const s = this._storage, nks = [], ns = {}, last = this._next - 1;
-		// #7: _keys stores numbers for index keys
-		// s[ok] and ns[nk] use implicit numeric-to-string coercion (native, faster than String())
+
 		for (const ok of this._keys.toReversed()) {
 			// ok is a number for index keys, string for named keys
 			const nk = typeof ok === 'number' ? (last - ok) : ok;
+
 			ns[nk] = s[ok];
 			nks.push(nk);
 		}
@@ -895,19 +928,22 @@ export class NANOS {
 
 	/**
 	 * Returns an iterator of [key, value] pairs in reverse (last-to-first key order).
-	 * Compact mode uses numeric index keys instead of the standard strings
-	 * (e.g. 0 instead of '0').
-	 * @param {boolean} [compact=false]
+	 * @param {boolean} [compact=false] Alias for num
+	 * @param {boolean} [num=false] Returns numeric index keys instead of strings
 	 * @yields {[string|number, *]}
 	 */
 	*reverseEntries (opts = undefined) {
-		opts = this.#getOpts(opts, 'compact');
+		opts = this.#getOpts(opts, 'num');
 		this._rio?.depend();
-		const storage = this._storage;
-		// #7: _keys stores numbers for index keys; compact returns as-is, non-compact converts
-		const ik = opts.compact ? ((k) => k) : ((k) => typeof k === 'number' ? String(k) : k);
-		const toFinal = (opts.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
-		for (const k of this._keys.toReversed()) yield [ ik(k), toFinal(storage[k]) ];
+
+		const storage = this._storage, num = opts.num || opts.compact, raw = opts.raw || !this._rio?.get;
+
+		for (const k of this._keys.toReversed()) {
+			const nsk = (!num && typeof k === 'number') ? String(k) : k;
+			const final = raw ? storage[k] : this.#final(storage[k]);
+
+			yield [ nsk, final ];
+		}
 	}
 
 	/**
@@ -942,6 +978,7 @@ export class NANOS {
 		if (key === undefined) key = this._next;
 		key = this.#wrapKey(key);
 		if (key === undefined) return;
+
 		const skey = String(key);
 		const ind = isIndex(skey) && parseInt(skey, 10);
 		let changed = false;
@@ -949,14 +986,16 @@ export class NANOS {
 		if (!Object.hasOwn(this._storage, skey)) {
 			// The key or index is new; add it in the proper place
 			changed = true;
-			// #7: store index keys as numbers in _keys
+
 			const storeKey = ind !== false ? ind : skey;
+
 			if (opts.insert) {
 				if (ind === false || !this._next) this._keys.unshift(storeKey);
 				else {
 					// Earliest placement maintaining ascending index order
 					// #7: _keys stores numbers for index keys
 					let ki = this._keys.length;
+
 					while (ki > 0 && (typeof this._keys[ki - 1] !== 'number' || ind < this._keys[ki - 1])) --ki;
 					this._keys.splice(ki, 0, storeKey);
 				}
@@ -964,10 +1003,9 @@ export class NANOS {
 				if (ind === false || ind >= this._next) this._keys.push(storeKey);
 				else {
 					// Latest placement maintaining ascending index order
-					// #3: insertion hint cache - O(1) amortized for sequential patterns
-					// #7: _keys stores numbers for index keys
 					let ki;
 					const hint = this._insertHint;
+
 					if (hint !== undefined && typeof this._keys[hint] === 'number' && ind >= this._keys[hint]) {
 						ki = hint;  // resume from last cached position
 					} else {
@@ -1026,7 +1064,7 @@ export class NANOS {
 	 * @param {boolean} [opts.insert=false] Add to beginning instead of end
 	 * @returns
 	 */
-	setRaw (key, value, opts = undefined) {
+	setRaw (key, value, opts) {
 		opts = this.#getOpts(opts, 'insert', OPTS_RAW);
 		return this.set(key, value, opts);
 	}
@@ -1047,13 +1085,16 @@ export class NANOS {
 	 * @param {boolean} [opts.raw=false] Return the raw, rather than final, shifted value
 	 * @returns {*}
 	 */
-	shift (opts = undefined) {
+	shift (opts) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "shift" after locking');
 		if (this._lockInd) throw new TypeError('NANOS: Cannot "shift" after index lock');
 		if (!this._next) return undefined;
+
 		const batch = this._rio?.batch || ((cb) => cb());
+
 		return batch(() => {
 			const res = this.delete(0, opts);
+
 			this.#renumber(1, this._next, -1);
 			return res;
 		});
@@ -1066,6 +1107,7 @@ export class NANOS {
 	 */
 	similar (...items) {
 		const nn = new this.constructor();
+
 		nn.setOptions(this._options);
 		nn.rio = this._rio?.create();
 		if (items.length) nn.push(...items);
@@ -1091,7 +1133,9 @@ export class NANOS {
 		if (start < 0) start = this.#wrapKey(start);
 		if (end < 0) end = this.#wrapKey(end);
 		if (end > this.next) end = this.next;
+
 		const result = this.similar();
+
 		for (let current = start; current < end; ++current) {
 			if (this.has(current)) {
 				result.set(current - start, this.at(current, opts), opts);
@@ -1130,14 +1174,17 @@ export class NANOS {
 	 */
 	toObject (opts = {}) {
 		let isArray = opts?.array || opts?.array1, obj = isArray ? [] : Object.create(null);
-		// #7: _keys stores numbers for index keys; convert to string for object key
+
 		for (const key of this._keys) {
 			const skey = typeof key === 'number' ? String(key) : key;
+
 			if (isArray && typeof key !== 'number' && isIndex(key) === false) {
 				obj = Object.setPrototypeOf(Object.fromEntries(Object.entries(obj)), null);
 				isArray = false;
 			}
+
 			const value = this.at(skey, opts);
+
 			if (value instanceof NANOS) obj[skey] = value.toObject(opts);
 			else obj[skey] = value;
 		}
@@ -1160,11 +1207,10 @@ export class NANOS {
 	 */
 	toSLID ({ compact = false, redact = false, inner = false } = {}) {
 		this._rio?.depend();
+
 		const escape = (str) => escapeJSString(str).replaceAll(')]', ')\\]');
 		// Inline serializer for plain objects/arrays/Maps/Sets - avoids allocating
 		// a full NANOS instance just to immediately serialize it.
-		// #6: squishPush - inline squishing helper: appends item to items[], inserting
-		// a space separator when compact mode requires it (avoids a second pass).
 		// In non-compact mode, items[] contains only content strings; join(' ') adds spaces.
 		// In compact mode, items[] contains content and space strings; join('') is correct.
 		const squishPush = compact
@@ -1172,6 +1218,7 @@ export class NANOS {
 				if (items.length) {
 					const tail = items[items.length - 1];
 					const joint = tail[tail.length - 1] + (item[0] || '');
+
 					if (!/['"\[\]]/.test(joint)) items.push(' ');
 				}
 				items.push(item);
@@ -1180,6 +1227,7 @@ export class NANOS {
 		const joinItems = compact ? (items) => items.join('') : (items) => items.join(' ');
 		const containerToStr = (value) => {
 			let keys, getVal;
+
 			if (Array.isArray(value)) {
 				keys = Object.keys(value);
 				getVal = (k) => value[k];
@@ -1192,11 +1240,14 @@ export class NANOS {
 				keys = Object.keys(value);
 				getVal = (k) => value[k];
 			}
+
 			let expInd = 0;
 			const items = [];
+
 			for (const k of keys) {
 				if (isIndex(k)) {
 					const ind = parseInt(k, 10);
+
 					squishPush(items, ((ind === expInd) ? '' : `${ind}=`) + valueToStr(getVal(k)));
 					expInd = ind + 1;
 				} else {
@@ -1207,12 +1258,14 @@ export class NANOS {
 		};
 		const itemsToStr_map = (map) => {
 			const items = [];
+
 			for (const [k, v] of map) squishPush(items, valueToStr(String(k)) + '=' + valueToStr(v));
 			return joinItems(items);
 		};
 		// #11: removed dead expInd counter
 		const itemsToStr_set = (set) => {
 			const items = [];
+
 			for (const v of set) squishPush(items, valueToStr(v));
 			return joinItems(items);
 		};
@@ -1237,15 +1290,17 @@ export class NANOS {
 		const finalValueToStr = this._rio ? ((value) => valueToStr(this.#final(value))) : valueToStr;
 		const itemsToStr = (node) => {
 			let expInd = 0;						// Expected next index
+
 			if (redact && node._redacted === true) return ((redact === 'comment') ? '/*???*/' : '');
+
 			// Hoist redaction flags to avoid per-key method call overhead
 			const redactIndexed = redact && !!node._redacted?.[0];
 			const items = [];
 			// Iterate _keys/_storage directly - avoids entries() generator overhead
 			// (closures, _rio?.depend() call, compact/raw option processing)
 			const storage = node._storage;
+
 			for (const k of node._keys) {
-				// #7: _keys stores numbers for index keys
 				if (typeof k === 'number') {
 					if (redactIndexed) {
 						if (redact === 'comment') squishPush(items, '/*?*/');
@@ -1263,8 +1318,8 @@ export class NANOS {
 			}
 			// Encode "sparse .next"
 			switch (node._next - expInd) {
-			case 2: squishPush(items, '@e'); // Fall thru
-			case 1: squishPush(items, '@e'); // Fall thru
+			case 2: squishPush(items, '@e'); /* falls through */
+			case 1: squishPush(items, '@e'); /* falls through */
 			case 0: break;
 			default: squishPush(items, `${node._next - 1}=@e`); break;
 			}
@@ -1297,7 +1352,9 @@ export class NANOS {
 	unshift (...values) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "unshift" after locking');
 		if (this._lockInd) throw new TypeError('NANOS: Cannot "unshift" after index lock');
+
 		const batch = this._rio?.batch || ((cb) => cb());
+
 		batch(() => values.toReversed().forEach((outer) => {
 			if (!(outer instanceof NANOS)) outer = this.similar(outer);
 			this.#renumber(0, this._next, outer.next);
@@ -1313,14 +1370,13 @@ export class NANOS {
 	 * @yields {*}
 	 */
 	// #8: direct _keys loop - eliminates double indirection via indexKeys() + atRaw()
-	*values (opts = undefined) {
+	*values (opts) {
 		this._rio?.depend();
-		const toFinal = (opts?.raw || !this._rio?.get) ? ((v) => v) : ((v) => this.#final(v));
-		const storage = this._storage;
-		// #7: _keys stores numbers for index keys - typeof check replaces isIndex() call
-		// storage[k] uses implicit numeric-to-string coercion (native, faster than String(k))
+
+		const raw = opts?.raw || !this._rio?.get, storage = this._storage;
+
 		for (const k of this._keys) {
-			if (typeof k === 'number') yield toFinal(storage[k]);
+			if (typeof k === 'number') yield raw ? storage[k] : this.#final(storage[k]);
 		}
 	}
 

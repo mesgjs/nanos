@@ -101,6 +101,17 @@ Deno.test("NANOS entries compact", () => {
 	assertEquals(entries, [[0, "a"], [1, "b"], ["foo", "bar"]]);
 });
 
+Deno.test("NANOS entries num option", () => {
+	const n = new NANOS("a", "b");
+	n.set("foo", "bar");
+	// { num: true } object form — index keys are numbers, named keys stay strings
+	const entries = [...n.entries({ num: true })];
+	assertEquals(entries, [[0, "a"], [1, "b"], ["foo", "bar"]]);
+	// { num: false } is the default — index keys are strings
+	const entriesNoNum = [...n.entries({ num: false })];
+	assertEquals(entriesNoNum, [["0", "a"], ["1", "b"], ["foo", "bar"]]);
+});
+
 Deno.test("NANOS filter", () => {
 	const n = new NANOS(1, "a", 2, "b", 3);
 	n.set("foo", "bar");
@@ -119,10 +130,38 @@ Deno.test("NANOS find", () => {
 	assertEquals(notFound, undefined);
 });
 
+Deno.test("NANOS find num option", () => {
+	const n = new NANOS("a", "b", "c");
+	n.set("foo", "bar");
+	// num: true — index key returned as number
+	const found = n.find((v) => v === "b", { num: true });
+	assertEquals(found, [1, "b"]);
+	// named key is unaffected by num
+	const foundNamed = n.find((v) => v === "bar", { num: true });
+	assertEquals(foundNamed, ["foo", "bar"]);
+	// num: false (default) — index key returned as string
+	const foundStr = n.find((v) => v === "c", { num: false });
+	assertEquals(foundStr, ["2", "c"]);
+});
+
 Deno.test("NANOS findLast", () => {
 	const n = new NANOS("a", "b", "a");
 	const found = n.findLast((v) => v === "a");
 	assertEquals(found, ["2", "a"]);
+});
+
+Deno.test("NANOS findLast num option", () => {
+	const n = new NANOS("a", "b", "a");
+	n.set("foo", "bar");
+	// num: true — index key returned as number
+	const found = n.findLast((v) => v === "a", { num: true });
+	assertEquals(found, [2, "a"]);
+	// named key is unaffected by num
+	const foundNamed = n.findLast((v) => v === "bar", { num: true });
+	assertEquals(foundNamed, ["foo", "bar"]);
+	// num: false (default) — index key returned as string
+	const foundStr = n.findLast((v) => v === "b", { num: false });
+	assertEquals(foundStr, ["1", "b"]);
 });
 
 Deno.test("NANOS forEach", () => {
@@ -133,6 +172,19 @@ Deno.test("NANOS forEach", () => {
 		result.push([key, value]);
 	});
 	assertEquals(result, [["0", "a"], ["1", "b"], ["foo", "bar"]]);
+});
+
+Deno.test("NANOS forEach num option", () => {
+	const n = new NANOS("a", "b");
+	n.set("foo", "bar");
+	// num: true — index keys are numbers, named keys stay strings
+	const resultNum = [];
+	n.forEach((value, key) => { resultNum.push([key, value]); }, { num: true });
+	assertEquals(resultNum, [[0, "a"], [1, "b"], ["foo", "bar"]]);
+	// num: false (default) — index keys are strings
+	const resultStr = [];
+	n.forEach((value, key) => { resultStr.push([key, value]); }, { num: false });
+	assertEquals(resultStr, [["0", "a"], ["1", "b"], ["foo", "bar"]]);
 });
 
 Deno.test("NANOS freeze", () => {
@@ -238,6 +290,16 @@ Deno.test("NANOS indexKeys", () => {
 	assertEquals(keys, ["0", "1"]);
 });
 
+Deno.test("NANOS indexKeys num", () => {
+	const n = new NANOS({ foo: 'bar' }, "a", "b");
+	// num=true — yields numeric keys
+	const keysNum = [...n.indexKeys(true)];
+	assertEquals(keysNum, [0, 1]);
+	// num=false (default) — yields string keys
+	const keysStr = [...n.indexKeys(false)];
+	assertEquals(keysStr, ["0", "1"]);
+});
+
 Deno.test("NANOS keyOf", () => {
 	const n = new NANOS("a", "b", "a");
 	assertEquals(n.keyOf("a"), "0");
@@ -245,11 +307,35 @@ Deno.test("NANOS keyOf", () => {
 	assertEquals(n.keyOf("c"), undefined);
 });
 
+Deno.test("NANOS keyOf num option", () => {
+	const n = new NANOS("a", "b", "a");
+	n.set("foo", "bar");
+	// num: true — index key returned as number
+	assertEquals(n.keyOf("a", { num: true }), 0);
+	assertEquals(n.keyOf("b", { num: true }), 1);
+	// named key is unaffected by num
+	assertEquals(n.keyOf("bar", { num: true }), "foo");
+	// not found still returns undefined
+	assertEquals(n.keyOf("c", { num: true }), undefined);
+});
+
 Deno.test("NANOS lastKeyOf", () => {
 	const n = new NANOS("a", "b", "a");
 	assertEquals(n.lastKeyOf("a"), "2");
 	assertEquals(n.lastKeyOf("b"), "1");
 	assertEquals(n.lastKeyOf("c"), undefined);
+});
+
+Deno.test("NANOS lastKeyOf num option", () => {
+	const n = new NANOS("a", "b", "a");
+	n.set("foo", "bar");
+	// num: true — index key returned as number
+	assertEquals(n.lastKeyOf("a", { num: true }), 2);
+	assertEquals(n.lastKeyOf("b", { num: true }), 1);
+	// named key is unaffected by num
+	assertEquals(n.lastKeyOf("bar", { num: true }), "foo");
+	// not found still returns undefined
+	assertEquals(n.lastKeyOf("c", { num: true }), undefined);
 });
 
 Deno.test("NANOS namedEntries", () => {
@@ -267,6 +353,14 @@ Deno.test("NANOS namedKeys", () => {
 Deno.test("NANOS keys", () => {
 	const n = new NANOS("a", { foo: 'bar' }, "b");
 	assertEquals([...n.keys()], ["0", "foo", "1"]);
+});
+
+Deno.test("NANOS keys num", () => {
+	const n = new NANOS("a", { foo: 'bar' }, "b");
+	// num=true — index keys are numbers, named keys stay strings
+	assertEquals([...n.keys(true)], [0, "foo", 1]);
+	// num=false (default) — all keys are strings
+	assertEquals([...n.keys(false)], ["0", "foo", "1"]);
 });
 
 
@@ -293,6 +387,14 @@ Deno.test("NANOS pairs", () => {
 	const n = new NANOS(["a", , "b"], { foo: 'bar' });
 	assertEquals(n.pairs(), ["0", "a", "2", "b", "foo", "bar"]);
 	assertEquals(n.pairs(true), [0, "a", 2, "b", "foo", "bar"]);
+});
+
+Deno.test("NANOS pairs num option", () => {
+	const n = new NANOS(["a", , "b"], { foo: 'bar' });
+	// { num: true } object form — index keys are numbers
+	assertEquals(n.pairs({ num: true }), [0, "a", 2, "b", "foo", "bar"]);
+	// { num: false } — index keys are strings (default)
+	assertEquals(n.pairs({ num: false }), ["0", "a", "2", "b", "foo", "bar"]);
 });
 
 Deno.test("NANOS pathSet", async (t) => {
@@ -452,6 +554,19 @@ Deno.test("NANOS reverseEntries", () => {
 	const n = new NANOS("a", { foo: 'bar' }, "b");
 	const entries = [...n.reverseEntries()];
 	assertEquals(entries, [["1", "b"], ["foo", "bar"], ["0", "a"]]);
+});
+
+Deno.test("NANOS reverseEntries num option", () => {
+	const n = new NANOS("a", { foo: 'bar' }, "b");
+	// num: true — index keys are numbers, named keys stay strings
+	const entriesNum = [...n.reverseEntries({ num: true })];
+	assertEquals(entriesNum, [[1, "b"], ["foo", "bar"], [0, "a"]]);
+	// compact alias also works
+	const entriesCompact = [...n.reverseEntries({ compact: true })];
+	assertEquals(entriesCompact, [[1, "b"], ["foo", "bar"], [0, "a"]]);
+	// num: false (default) — index keys are strings
+	const entriesStr = [...n.reverseEntries({ num: false })];
+	assertEquals(entriesStr, [["1", "b"], ["foo", "bar"], ["0", "a"]]);
 });
 
 
