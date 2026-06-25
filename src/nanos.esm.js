@@ -43,7 +43,6 @@ const OPTS_RAW   = { raw: true };
  * @returns {boolean}
  */
 export const isIndex = (key) => {
-	// #5: numeric fast-path - avoids regex for the common internal case
 	if (typeof key === 'number') return Number.isInteger(key) && key >= 0;
 	return /^(?:0|[1-9]\d*)$/.test(String(key));
 };
@@ -76,9 +75,13 @@ export class NANOS {
 	 * @param {...*} items
 	 */
 	constructor (...items) {
+		this._insertHint = undefined;
+		this._keys = [];
+		this._lockInd = undefined;
+		this._next = 0;
 		this._options = {};
-		this.clear();
-		this.push(...items);
+		this._storage = {};
+		if (items.length) this.push(...items);
 	}
 
 	/**
@@ -129,12 +132,12 @@ export class NANOS {
 	 */
 	clear () {
 		if (this._locked) throw new TypeError('NANOS: Cannot "clear" after locking');
-		this._next = 0;
-		this._keys = [];
-		this._storage = {};
-		this._lockInd = undefined;
 		this._insertHint = undefined;
+		this._keys = [];
+		this._lockInd = undefined;
+		this._next = 0;
 		delete this._redacted;
+		this._storage = {};
 		this._rio?.changed();
 		return this;
 	}
@@ -812,7 +815,6 @@ export class NANOS {
 	push (...values) {
 		if (this._locked) throw new TypeError('NANOS: Cannot "push" after locking');
 
-		const batch = this._rio?.batch || ((cb) => cb());
 		const options = this._options, transform = options.transform;
 		const pushEntries = (entries, next = 0) => {
 			const base = this._next, minNext = base + next;
@@ -846,13 +848,18 @@ export class NANOS {
 		const pushInner = (transform === 'sets') ? mergeMaps : pushEntries;
 		const pushOuter = (outer) => {
 			if (isPlainObject(outer)) pushInner(Object.entries(outer));
-			else if (Array.isArray(outer)) pushInner(Object.entries(outer), outer.length);
-			else if (outer instanceof NANOS) pushInner(outer.entries(), outer.next);
-			else if (!options.opaqueMaps && outer instanceof Map) pushInner(outer.entries());
+			else if (Array.isArray(outer)) {
+				if (outer.length) pushInner(Object.entries(outer), outer.length);
+			} else if (outer instanceof NANOS) {
+				if (outer.size) pushInner(outer.entries(), outer.next);
+			} else if (!options.opaqueMaps && outer instanceof Map) pushInner(outer.entries());
 			else if (!options.opaqueSets && outer instanceof Set) pushInner([...outer.values()].entries());
 			else this.set(undefined, outer);
 		};
-		batch(() => values.forEach(pushOuter));
+		if (values.length) {
+			if (this._rio?.batch) this._rio.batch(() => values.forEach(pushOuter));
+			else values.forEach(pushOuter);
+		}
 		return this;
 	}
 
