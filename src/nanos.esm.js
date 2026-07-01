@@ -96,10 +96,12 @@ export class NANOS {
 	at (key, opts = undefined) {
 		opts = this.#getOpts(opts, 'default');
 		if (Array.isArray(key)) {
-			let [next, finalNext] = [this, this];
+			// deno-lint-ignore no-this-alias
+			let next = this, finalNext = this;
 			for (const curKey of key) {
 				if (!(finalNext instanceof NANOS) || !finalNext.has(curKey)) return opts.default;
-				[next, finalNext] = [finalNext.atRaw(curKey), finalNext.at(curKey)];
+				next = finalNext.atRaw(curKey);
+				finalNext = finalNext.at(curKey);
 			}
 			return opts.raw ? next : finalNext;
 		}
@@ -750,7 +752,8 @@ export class NANOS {
 	pathSet (path, opts = {}) {
 		// Auto-vivifying traversal
 		const avt = (path) => {
-			let [leaf] = [this];
+			// deno-lint-ignore no-this-alias
+			let leaf = this;
 
 			for (const key of path) {
 				let val = leaf.at(key);
